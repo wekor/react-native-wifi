@@ -1,6 +1,6 @@
 {
   "name": "@wekor/react-native-wifi",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Wi-Fi for React Native: join networks and hotspots, read the current network, scan.",
   "main": "./lib/module/index.js",
   "types": "./lib/typescript/src/index.d.ts",
