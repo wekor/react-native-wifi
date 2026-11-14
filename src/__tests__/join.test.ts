@@ -1,5 +1,13 @@
 import { beforeEach, expect, test } from 'bun:test';
-import { calls, callsOf, emit, flush, lastCall, nativeError } from './native';
+import {
+  calls,
+  callsOf,
+  emit,
+  flush,
+  lastCall,
+  nativeError,
+  platform,
+} from './native';
 
 const { configure, forgetNetworks, isWifiError, joinNetwork } = await import(
   '../index'
@@ -247,4 +255,77 @@ test('forgetNetworks ends the matching joins and tells native which names', asyn
   await all;
   expect(lastCall('forgetJoinedNetworks').args).toEqual([{}]);
   expect(other.network.active).toBe(false);
+});
+
+/** Runs `test` as on Android at `version`, then puts the platform back. */
+const onAndroid = async (version: number, test: () => Promise<void>) => {
+  Object.assign(platform, { OS: 'android', Version: version });
+  try {
+    await test();
+  } finally {
+    Object.assign(platform, { OS: 'ios', Version: '18.0' });
+  }
+};
+
+const permission = (status: string, canAskAgain = true) => ({
+  status,
+  canAskAgain,
+});
+
+test('before Android 10, a join without the Wi-Fi permission asks for it, then joins', () =>
+  onAndroid(28, async () => {
+    const pending = joinNetwork({ ssid: 'Camera', password: 'secret123' });
+    lastCall('getWifiPermission').deferred.resolve(permission('undetermined'));
+    await flush();
+    lastCall('requestWifiPermission').deferred.resolve(permission('granted'));
+    await flush();
+    lastCall('joinNetwork').deferred.resolve({ ssid: 'Camera' });
+    expect((await pending).ssid).toBe('Camera');
+  }));
+
+test('before Android 10, a refused permission rejects as unauthorized and never reaches native', () =>
+  onAndroid(28, async () => {
+    const pending = joinNetwork({ ssid: 'Camera' });
+    lastCall('getWifiPermission').deferred.resolve(permission('denied'));
+    await flush();
+    lastCall('requestWifiPermission').deferred.resolve(
+      permission('denied', false)
+    );
+    const error = await pending.catch((e) => e);
+    expect(isWifiError(error, 'unauthorized')).toBe(true);
+    expect(callsOf('joinNetwork')).toHaveLength(0);
+  }));
+
+test('before Android 10, a granted permission is not asked for again', () =>
+  onAndroid(24, async () => {
+    const pending = joinNetwork({ ssid: 'Camera' });
+    lastCall('getWifiPermission').deferred.resolve(permission('granted'));
+    await flush();
+    lastCall('joinNetwork').deferred.resolve({ ssid: 'Camera' });
+    await pending;
+    expect(callsOf('requestWifiPermission')).toHaveLength(0);
+  }));
+
+test('aborting while the permission is asked for rejects as cancelled, without joining', () =>
+  onAndroid(28, async () => {
+    const controller = new AbortController();
+    const pending = joinNetwork({ ssid: 'Camera', signal: controller.signal });
+    lastCall('getWifiPermission').deferred.resolve(permission('undetermined'));
+    await flush();
+    controller.abort();
+    lastCall('requestWifiPermission').deferred.resolve(permission('granted'));
+    const error = await pending.catch((e) => e);
+    expect(isWifiError(error, 'cancelled')).toBe(true);
+    expect(callsOf('joinNetwork')).toHaveLength(0);
+  }));
+
+test('Android 10+ and iOS join without asking for any permission', async () => {
+  for (const join of [
+    () => onAndroid(29, () => joined({ ssid: 'Camera' }).then(() => {})),
+    () => joined({ ssid: 'Camera' }).then(() => {}),
+  ]) {
+    await join();
+  }
+  expect(callsOf('getWifiPermission')).toHaveLength(0);
+  expect(callsOf('requestWifiPermission')).toHaveLength(0);
 });

@@ -41,8 +41,15 @@ const native = new Proxy(
   }
 );
 
+/** The platform the library sees; a test sets it and puts it back. */
+export const platform: { OS: string; Version: number | string } = {
+  OS: 'ios',
+  Version: '18.0',
+};
+
 mock.module('react-native', () => ({
   TurboModuleRegistry: { getEnforcing: () => native },
+  Platform: platform,
 }));
 mock.module('../NativeReactNativeWifi', () => ({ default: native }));
 

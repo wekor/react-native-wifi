@@ -55,7 +55,7 @@ title: 从 react-native-wifi-reborn 迁移
 
 wifi-reborn 的 `getCurrentWifiSSID()` 在 iOS 上会自行请求定位权限，其 Android 上的加入也要求定位
 权限。在这里，应用在自己选择的时机通过 [`requestWifiPermission()`](./api.mdx#requestwifipermission) 请求权限，
-而且只有在 Android 9 及更早版本上加入网络才需要该权限。
+而且只有在 Android 9 及更早版本上加入网络才需要该权限，`joinNetwork` 会自己请求。
 
 ## Android {#android}
 

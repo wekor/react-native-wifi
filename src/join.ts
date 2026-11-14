@@ -1,8 +1,10 @@
+import { Platform } from 'react-native';
 import { checkTimeout, settings } from './config';
 import { cancelled, WifiError, wrap } from './errors';
 import { Listeners } from './listeners';
 import native from './NativeReactNativeWifi';
 import { cancellable } from './operations';
+import { getWifiPermission, requestWifiPermission } from './permission';
 import { checkHost, connectTo, describeFailure } from './probe';
 import { securityOf } from './security';
 import type { JoinedNetwork, JoinNetworkOptions } from './types';
@@ -109,10 +111,30 @@ const validate = ({
 };
 
 /**
+ * Android 10+ joins through a system sheet, which needs no permission. Before, a join adds a saved network and reads
+ * the SSID to see the phone switch to it, which needs precise location: asked for as the user starts a join.
+ */
+const needsPermission = () =>
+  Platform.OS === 'android' && (Platform.Version as number) < 29;
+
+const askForPermission = async (ssid: string, signal?: AbortSignal) => {
+  if (signal?.aborted) throw cancelled(`Joining ${ssid}`);
+  const granted =
+    (await getWifiPermission()).granted ||
+    (await requestWifiPermission()).granted;
+  if (signal?.aborted) throw cancelled(`Joining ${ssid}`);
+  if (!granted)
+    throw new WifiError(
+      'unauthorized',
+      'Joining before Android 10 needs the Wi-Fi permission (precise location)'
+    );
+};
+
+/**
  * Puts the phone on a network, typically a device's own hotspot, and resolves once it is on it with an address
  * and, on Android, routes the app's traffic there; with `waitFor`, also once the device accepts a connection. The
- * system asks the user first. A failure, a timeout or an abort leaves the phone where it was. A newer join
- * replaces an earlier one.
+ * system asks the user first; before Android 10 it also asks for the Wi-Fi permission when the app lacks it. A
+ * failure, a timeout or an abort leaves the phone where it was. A newer join replaces an earlier one.
  */
 export const joinNetwork = async (
   options: JoinNetworkOptions
@@ -123,6 +145,8 @@ export const joinNetwork = async (
     options.timeout ?? settings.timeouts.join,
     'timeout'
   );
+  // The timeout starts after it: a permission dialog cannot be taken back.
+  if (needsPermission()) await askForPermission(ssid, signal);
   const deadline = timeout > 0 ? Date.now() + timeout : undefined;
 
   let joinId = 0;

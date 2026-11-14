@@ -53,8 +53,9 @@ export type JoinNetworkOptions = {
    */
   waitFor?: Host;
   /**
-   * Milliseconds for all of it, the user's time with the system's prompt and `waitFor` included; `0` waits without
-   * limit. Default: `configure({ timeouts: { join } })`, 30 s unless changed.
+   * Milliseconds for all of it, the user's time with the system's prompt and `waitFor` included (not the permission
+   * prompt before Android 10); `0` waits without limit. Default: `configure({ timeouts: { join } })`, 30 s unless
+   * changed.
    */
   timeout?: number;
   /** Aborting rejects with `cancelled` and undoes the join: the network is left and the system forgets it. */
