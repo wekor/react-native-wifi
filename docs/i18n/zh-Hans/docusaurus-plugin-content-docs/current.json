@@ -1,0 +1,10 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.docsSidebar.category.Use cases": {
+    "message": "案例",
+    "description": "The label for category 'Use cases' in sidebar 'docsSidebar'"
+  }
+}

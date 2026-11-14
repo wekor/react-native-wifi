@@ -1,0 +1,10 @@
+pre-commit:
+  jobs:
+    - name: biome
+      run: bun biome check --write --no-errors-on-unmatched {staged_files}
+      glob: '*.{js,mjs,ts,tsx}'
+      stage_fixed: true
+commit-msg:
+  jobs:
+    - name: commitlint
+      run: bun commitlint --edit {1}

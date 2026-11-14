@@ -1,0 +1,47 @@
+---
+title: Devices on the same network
+---
+
+# Devices on the same network
+
+The device joins a Wi-Fi network, a home router say, often set up over Bluetooth, and reports its IP address. The
+phone stays on its own network and talks to the device there, if both are on the same one.
+
+## Example
+
+```ts
+import { getCurrentNetwork, probe } from '@wekor/react-native-wifi';
+
+/** Whether the phone reaches the device at `ip`; if not, a hint for the user. */
+export async function checkDevice(ip: string, deviceSsid: string) {
+  if (await probe(ip, 80, { timeout: 2_000 })) return { ok: true } as const;
+
+  const phone = await getCurrentNetwork();
+  if (!phone) return { ok: false, hint: 'Connect the phone to Wi-Fi.' } as const;
+  if (phone.ssid && phone.ssid !== deviceSsid)
+    return { ok: false, hint: `The device is on ${deviceSsid}, the phone on ${phone.ssid}.` } as const;
+  return { ok: false, hint: 'The device does not answer. Is it on?' } as const;
+}
+```
+
+To put the device on the phone's network in the first place, offer that network first:
+
+```ts
+import { getCurrentNetwork, requestWifiPermission } from '@wekor/react-native-wifi';
+
+// Reading the network's name needs the Wi-Fi permission (location underneath).
+const { granted } = await requestWifiPermission();
+const phoneSsid = granted ? (await getCurrentNetwork())?.ssid : undefined;
+// List `phoneSsid` first, marked "same as your phone", when the device asks which network to join.
+```
+
+## Key points
+
+- **`probe` answers yes or no.** It resolves `true` as soon as the device accepts a TCP connection on the port,
+  and `false` once the timeout passes. Keep the timeout short when it decides between two ways, such as Wi-Fi or
+  Bluetooth.
+- **It rejects only when the user must act**: `'local-network-denied'` on iOS, when the app may not reach the local
+  network. Ask with [`requestLocalNetworkPermission()`](./permissions.mdx#local-network-permission) first.
+- **Names only help the user choose.** Some routers give their 2.4 GHz and 5 GHz networks different names on one
+  local network, so different names can still reach each other. `probe` has the last word.
+- **No HTTP needed.** Only the connection is made, so it works for any service: HTTP, WebSocket, RTSP or your own.

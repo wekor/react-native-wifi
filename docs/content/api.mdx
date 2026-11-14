@@ -1,0 +1,515 @@
+---
+title: API reference
+toc_max_heading_level: 2
+---
+
+# API reference
+
+```ts
+import {
+  addNetworkSuggestions,
+  bindProcessToWifi,
+  configure,
+  forgetNetworks,
+  getCurrentNetwork,
+  getScanResults,
+  getWifiPermission,
+  isWifiEnabled,
+  isWifiError,
+  joinNetwork,
+  onCurrentNetworkChange,
+  onWifiEnabledChange,
+  openWifiSettings,
+  probe,
+  removeNetworkSuggestions,
+  requestLocalNetworkPermission,
+  requestWifiPermission,
+  scanNetworks,
+  unbindProcess,
+  useCurrentNetwork,
+  useWifiPermission,
+  WifiError,
+} from '@wekor/react-native-wifi';
+```
+
+Every function exists on both platforms. Those marked Android only reject with `'unsupported'` on iOS (or throw
+it, for those without a promise), since iOS cannot do what they do.
+
+## Contents
+
+### Permissions
+
+| API | Description |
+| --- | --- |
+| [`getWifiPermission()`](#getwifipermission) | Reads the Wi-Fi permission without prompting. |
+| [`requestWifiPermission()`](#requestwifipermission) | Prompts for the Wi-Fi permission: network names and scanning. |
+| [`useWifiPermission()`](#usewifipermission) | The Wi-Fi permission as React state. |
+| [`requestLocalNetworkPermission()`](#requestlocalnetworkpermission) | Prompts for local network access (iOS). |
+
+### Joining and reaching devices
+
+| API | Description |
+| --- | --- |
+| [`joinNetwork()`](#joinnetwork) | Puts the phone on a network, optionally until a device there answers. |
+| [`JoinedNetwork`](#joinednetwork) | What `joinNetwork` resolves with: address, `leave()`, `onLost()`. |
+| [`forgetNetworks()`](#forgetnetworks) | Leaves and forgets networks the app joined, from any launch. |
+| [`probe()`](#probe) | Whether a device accepts a connection, within a timeout. |
+| [`bindProcessToWifi()`](#bindprocesstowifi) | Routes the app's traffic through Wi-Fi (Android). |
+| [`unbindProcess()`](#unbindprocess) | Routes it as the system chooses again. |
+
+### Current network
+
+| API | Description |
+| --- | --- |
+| [`getCurrentNetwork()`](#getcurrentnetwork) | The Wi-Fi network the phone is on. |
+| [`onCurrentNetworkChange()`](#oncurrentnetworkchange) | Every change of network or address. |
+| [`useCurrentNetwork()`](#usecurrentnetwork) | The current Wi-Fi network as React state. |
+
+### Android only
+
+| API | Description |
+| --- | --- |
+| [`scanNetworks()`](#scannetworks) | <Platforms android /> Scans for networks in range. |
+| [`getScanResults()`](#getscanresults) | <Platforms android /> What the system's last scan found. |
+| [`addNetworkSuggestions()`](#addnetworksuggestions) | <Platforms android="10+" /> Networks the system may join on its own. |
+| [`removeNetworkSuggestions()`](#removenetworksuggestions) | <Platforms android="10+" /> Withdraws suggestions. |
+| [`isWifiEnabled()`](#iswifienabled) | <Platforms android /> Whether Wi-Fi is on. |
+| [`onWifiEnabledChange()`](#onwifienabledchange) | <Platforms android /> Wi-Fi turning on or off. |
+| [`openWifiSettings()`](#openwifisettings) | <Platforms android /> Opens the Wi-Fi panel or settings. |
+
+### Configuration and errors
+
+| API | Description |
+| --- | --- |
+| [`configure()`](#configure) | Default timeouts. |
+| [`WifiError`](#wifierror) | The error every failure carries. |
+| [`isWifiError()`](#iswifierror) | Narrows an unknown error to `WifiError`. |
+
+## Permissions
+
+<ApiBox id="getwifipermission" name="getWifiPermission()" android ios>
+
+Reads the Wi-Fi permission without prompting.
+
+<Returns>`Promise<PermissionResponse>`. See [`PermissionResponse`](#permissionresponse).</Returns>
+
+</ApiBox>
+
+<ApiBox id="requestwifipermission" name="requestWifiPermission()" android ios>
+
+Prompts for the permission to read the name of the network the phone is on, and to scan, when the user can still
+be asked; otherwise resolves at once with the current response. A grant has
+[`onCurrentNetworkChange()`](#oncurrentnetworkchange) listeners get the network again, now named. Joining
+a network needs it only on Android 9 and earlier.
+
+<Returns>`Promise<PermissionResponse>`. `granted` needs precise location.</Returns>
+
+<Errors>`'unsupported'` on iOS when `NSLocationWhenInUseUsageDescription` is missing.</Errors>
+
+**Requests**
+
+| Platform | Permission |
+| --- | --- |
+| Android 13 and later | `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION` and `NEARBY_WIFI_DEVICES`, as far as the manifest declares them |
+| Android 12 and earlier | `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION` |
+| iOS | When-in-use location, with full accuracy |
+
+```ts
+const { granted, canAskAgain } = await requestWifiPermission();
+if (!granted && !canAskAgain) Linking.openSettings();
+```
+
+</ApiBox>
+
+<ApiBox id="usewifipermission" name="useWifiPermission(options)" android ios>
+
+The Wi-Fi permission as React state, shaped like Expo's permission hooks.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `options`<Optional /> | `{ get?: boolean; request?: boolean }` | `get` (default `true`) reads the permission on mount. `request` (default `false`) requests it on mount instead. |
+
+<Returns>`[PermissionResponse | null, request, get]`. The response is `null` until it has been read; `request` and `get` return `Promise<PermissionResponse>` and update the state.</Returns>
+
+</ApiBox>
+
+<ApiBox id="requestlocalnetworkpermission" name="requestLocalNetworkPermission(options)" android ios>
+
+Prompts for local network access, which iOS 14+ requires before the app reaches devices on the local network,
+and resolves with the answer; when the user already answered, resolves with it without a prompt. iOS has no API
+for this permission: the library advertises a Bonjour service and browses for it, which is why there is no `get`.
+Android has no such permission and resolves granted at once.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `options`<Optional /> | `{ timeout?: number; signal?: AbortSignal }` | The prompt waits for the user; `timeout` (default none) bounds that. |
+
+<Returns>`Promise<PermissionResponse>`. `canAskAgain` is `false` once the user answered: only Settings changes it.</Returns>
+
+<Errors>`'unsupported'` when `Info.plist` lacks `NSLocalNetworkUsageDescription`, or `_preflight_check._tcp` in `NSBonjourServices` (the config plugin adds both); `'not-permitted'` in the background, where iOS denies without asking; `'timeout'`; `'cancelled'`.</Errors>
+
+```ts
+const { granted } = await requestLocalNetworkPermission();
+```
+
+</ApiBox>
+
+## Joining and reaching devices
+
+<ApiBox id="joinnetwork" name="joinNetwork(options)" android ios>
+
+Puts the phone on a network and resolves once it is on it with an address and, on Android, routes the app's
+traffic there; with `waitFor`, also once the device accepts a connection. The system asks the user first. A
+failure leaves the phone where it was. A newer join replaces an earlier one. See
+[Connect to a device's hotspot](./hotspot-devices.mdx).
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `options` | [`JoinNetworkOptions`](#joinnetworkoptions) | The network, the device to wait for, and how long. |
+
+<Returns>`Promise<JoinedNetwork>`. See [`JoinedNetwork`](#joinednetwork).</Returns>
+
+<Errors>`'user-denied'` (iOS), `'not-found'` (Android: not in range, or the sheet dismissed), `'unreachable'` (joined, but `waitFor` never answered), `'local-network-denied'` (iOS), `'timeout'`, `'cancelled'`, `'wifi-off'` (Android 10+), `'invalid-argument'`, `'unsupported'`, `'not-permitted'` (iOS, in the background), `'join-failed'`.</Errors>
+
+```ts
+const network = await joinNetwork({
+  ssid: 'Device_',
+  prefix: true,
+  password: 'secret123',
+  waitFor: { host: '192.168.4.1', port: 80 },
+});
+```
+
+</ApiBox>
+
+<ApiBox id="joinednetwork" name="JoinedNetwork" android ios>
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `ssid` | `string` | The network's actual name; with `prefix`, the one the system picked where the platform reports it. |
+| `bssid`<Optional /> | `string` | Uppercase, colon-separated. |
+| `ip`<Optional /> | `string` | The phone's IPv4 address on the network. |
+| `gateway`<Optional /> | `string` | <Platforms android /> The default gateway, usually the device whose hotspot this is. |
+| `active` | `boolean` | `true` until `leave()`, or until the phone leaves the network on its own. |
+
+| Method | Description |
+| --- | --- |
+| `leave(): Promise<void>` | Leaves the network and has the system forget it. Also after it was lost: iOS keeps it configured until forgotten. Calling it again does nothing. |
+| `onLost(listener: () => void): () => void` | Calls `listener` once when the phone leaves the network on its own, or a newer join replaces it; returns the remover. |
+
+</ApiBox>
+
+<ApiBox id="forgetnetworks" name="forgetNetworks(ssids)" android ios>
+
+Leaves the networks the app joined and has the system forget them. On iOS this reaches networks joined in earlier
+launches, which iOS keeps until forgotten; on Android, joins end with the app, so only the current one is left.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `ssids`<Optional /> | `string[]` | Names, or the prefixes `joinNetwork` was given; omitted, every network the app joined. |
+
+<Returns>`Promise<void>`</Returns>
+
+</ApiBox>
+
+<ApiBox id="probe" name="probe(host, port, options)" android ios>
+
+Whether `host` accepts a TCP connection on `port` within the timeout: what tells that a device is up on the
+network the phone is on. Resolves `true` as soon as it does. Any protocol counts, since only the connection is
+made. See [Devices on the same network](./same-network.mdx).
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `host` | `string` | The device's IP address or host name. |
+| `port` | `number` | The port its service listens on. |
+| `options`<Optional /> | `{ timeout?: number; signal?: AbortSignal }` | `timeout` defaults to 5 s. |
+
+<Returns>`Promise<boolean>`: `false` once the timeout passes without a connection.</Returns>
+
+<Errors>`'local-network-denied'` (iOS: the user has to allow it in Settings), `'invalid-argument'` (an empty host, or a port outside 1–65535), `'cancelled'`.</Errors>
+
+```ts
+if (await probe('192.168.1.42', 80, { timeout: 2_000 })) startTransfer();
+```
+
+</ApiBox>
+
+<ApiBox id="bindprocesstowifi" name="bindProcessToWifi(options)" android ios>
+
+Routes all of the app's traffic through Wi-Fi, including a network without internet that Android would pass over
+for mobile data, until [`unbindProcess()`](#unbindprocess). With a `joinNetwork` active, binds to the joined
+network. If the network goes away, traffic is routed as the system chooses again. iOS resolves at once: it sends
+traffic for the Wi-Fi network's addresses there without binding.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `options`<Optional /> | `{ requireInternet?: boolean; timeout?: number }` | `requireInternet` (default `false`) waits for a Wi-Fi network with internet. `timeout` defaults to 10 s. |
+
+<Returns>`Promise<void>`, once bound.</Returns>
+
+<Errors>`'timeout'`, `'cancelled'` (a newer bind or an unbind).</Errors>
+
+</ApiBox>
+
+<ApiBox id="unbindprocess" name="unbindProcess()" android ios>
+
+Routes the app's traffic as the system chooses again, and lets go of the network `bindProcessToWifi` held. iOS
+resolves at once.
+
+<Returns>`Promise<void>`</Returns>
+
+</ApiBox>
+
+## Current network
+
+<ApiBox id="getcurrentnetwork" name="getCurrentNetwork()" android ios>
+
+The Wi-Fi network the phone is on. Never rejects for lack of permission: without the Wi-Fi permission the network
+lacks `ssid` and `bssid`.
+
+<Returns>`Promise<WifiNetwork | null>`: `null` when the phone is on no Wi-Fi network. See [`WifiNetwork`](#wifinetwork).</Returns>
+
+</ApiBox>
+
+<ApiBox id="oncurrentnetworkchange" name="onCurrentNetworkChange(listener)" android ios>
+
+Calls `listener` with the current Wi-Fi network as soon as it is known, then whenever the phone joins, leaves or
+switches networks, or its address or gateway changes. Signal strength and link speed alone are no change.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `listener` | `(network: WifiNetwork \| null) => void` | Called with `null` while the phone is on no Wi-Fi network. |
+
+<Returns>`() => void`, which removes the listener. Calling it more than once is harmless.</Returns>
+
+</ApiBox>
+
+<ApiBox id="usecurrentnetwork" name="useCurrentNetwork()" android ios>
+
+The current Wi-Fi network as React state.
+
+<Returns>`WifiNetwork | null | undefined`: `undefined` until known, `null` while the phone is on no Wi-Fi network.</Returns>
+
+</ApiBox>
+
+## Android only
+
+<ApiBox id="scannetworks" name="scanNetworks(options)" android>
+
+Starts a scan and resolves with what it found. Calls while a scan runs share it.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `options`<Optional /> | `{ timeout?: number }` | Milliseconds to wait; default 15 s, `0` without limit. |
+
+<Returns>`Promise<ScannedNetwork[]>`, one entry per access point. See [`ScannedNetwork`](#scannednetwork).</Returns>
+
+<Errors>`'unsupported'` (iOS), `'unauthorized'`, `'location-off'` (before Android 13), `'wifi-off'`, `'scan-throttled'` (4 scans in 2 minutes in the foreground since Android 9), `'scan-failed'`, `'timeout'`.</Errors>
+
+</ApiBox>
+
+<ApiBox id="getscanresults" name="getScanResults()" android>
+
+What the system's last scan found, whoever ran it; no new scan.
+
+<Returns>`Promise<ScannedNetwork[]>`</Returns>
+
+<Errors>`'unsupported'` (iOS), `'unauthorized'`, `'location-off'` (before Android 13).</Errors>
+
+</ApiBox>
+
+<ApiBox id="addnetworksuggestions" name="addNetworkSuggestions(suggestions)" android="10+">
+
+Suggests networks the system may join on its own; the user approves the app once, in a notification. Suggesting
+a network again replaces its earlier suggestion.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `suggestions` | [`NetworkSuggestion[]`](#networksuggestion) | The networks. |
+
+<Returns>`Promise<void>`</Returns>
+
+<Errors>`'unsupported'` (iOS, Android 9 and earlier), `'invalid-argument'`, `'unauthorized'` (the user disallowed the app's suggestions), `'join-failed'` (too many, or another refusal; the status in `nativeCode`).</Errors>
+
+</ApiBox>
+
+<ApiBox id="removenetworksuggestions" name="removeNetworkSuggestions(ssids)" android="10+">
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `ssids`<Optional /> | `string[]` | The networks to withdraw; omitted, every suggestion the app made. |
+
+<Returns>`Promise<void>`</Returns>
+
+<Errors>`'unsupported'` (iOS, Android 9 and earlier).</Errors>
+
+</ApiBox>
+
+<ApiBox id="iswifienabled" name="isWifiEnabled()" android>
+
+<Returns>`Promise<boolean>`</Returns>
+
+<Errors>`'unsupported'` (iOS: it does not tell).</Errors>
+
+</ApiBox>
+
+<ApiBox id="onwifienabledchange" name="onWifiEnabledChange(listener)" android>
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `listener` | `(enabled: boolean) => void` | Called when Wi-Fi has turned on or off. |
+
+<Returns>`() => void`, which removes the listener.</Returns>
+
+<Throws>`'unsupported'` (iOS).</Throws>
+
+</ApiBox>
+
+<ApiBox id="openwifisettings" name="openWifiSettings()" android>
+
+Opens the Wi-Fi panel over the app on Android 10+, or the Wi-Fi settings before. Only the user can switch Wi-Fi
+on Android 10+.
+
+<Returns>`Promise<void>`, once opened.</Returns>
+
+<Errors>`'unsupported'` (iOS: apps cannot open the Wi-Fi settings).</Errors>
+
+</ApiBox>
+
+## Configuration and errors
+
+<ApiBox id="configure" name="configure(options)" android ios>
+
+Sets the defaults later calls use; a call's own options win.
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `options.timeouts`<Optional /> | `{ join?: number; probe?: number; scan?: number; bind?: number }` | Milliseconds; `0` waits without limit. Defaults: `join` 30 s, `probe` 5 s, `scan` 15 s, `bind` 10 s. |
+
+```ts
+configure({ timeouts: { join: 60_000 } });
+```
+
+</ApiBox>
+
+<ApiBox id="wifierror" name="WifiError" android ios>
+
+Every rejection is a `WifiError`, with the same `code` on both platforms.
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `code` | [`WifiErrorCode`](#wifierrorcode) | What went wrong. |
+| `message` | `string` | A description, for logs; for `'unreachable'`, the last cause. |
+| `nativeCode`<Optional /> | `number` | The platform's own code: an `NEHotspotConfigurationError` on iOS, a suggestion status on Android. |
+
+</ApiBox>
+
+<ApiBox id="iswifierror" name="isWifiError(error, code)" android ios>
+
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `error` | `unknown` | Anything caught. |
+| `code`<Optional /> | `WifiErrorCode` | Also checks the code. |
+
+<Returns>`error is WifiError`</Returns>
+
+```ts
+try {
+  await joinNetwork({ ssid, password, waitFor });
+} catch (error) {
+  if (isWifiError(error, 'user-denied')) return;
+  if (isWifiError(error, 'local-network-denied')) return showOpenSettings();
+  throw error;
+}
+```
+
+</ApiBox>
+
+## Types
+
+### `PermissionResponse`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `status` | `'granted' \| 'denied' \| 'undetermined'` | |
+| `granted` | `boolean` | `status === 'granted'`. |
+| `canAskAgain` | `boolean` | Whether a request can still show the prompt. |
+| `expires` | `'never'` | |
+
+### `JoinNetworkOptions`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `ssid` | `string` | The network's name, or with `prefix` the start of it. |
+| `prefix`<Optional /> | `boolean` | Joins any network whose name starts with `ssid`. Android 10+ and iOS; not with `hidden`. |
+| `password`<Optional /> | `string` | Omit for an open network. |
+| `security`<Optional /> | [`Security`](#security) | `'wpa2'` with a password, else `'open'`. |
+| `hidden`<Optional /> | `boolean` | The network does not broadcast its name. |
+| `waitFor`<Optional /> | `{ host: string; port: number }` | Resolve only once this accepts a TCP connection; else reject with `'unreachable'` and leave. |
+| `timeout`<Optional /> | `number` | Milliseconds for all of it, the user's time with the prompt and `waitFor` included; `0` without limit. Default 30 s. |
+| `signal`<Optional /> | `AbortSignal` | Aborting rejects with `'cancelled'` and undoes the join. |
+| `bindProcess`<Optional /> | `boolean` | <Platforms android /> Routes the app's traffic through the network while on it; default `true`. |
+| `joinOnce`<Optional /> | `boolean` | <Platforms ios /> The system forgets the network when the app leaves the foreground; default `false`. |
+
+### `Security`
+
+`'open' | 'wep' | 'wpa2' | 'wpa3'`. `'wpa2'` also joins WPA and WPA2/WPA3 transition networks. `'wpa3'` is for
+WPA3-only networks; iOS joins them as WPA2. `'wep'` works on iOS and Android 9 and earlier.
+
+### `WifiNetwork`
+
+Fields the platform does not report, or hides, are absent.
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `ssid`<Optional /> | `string` | Absent without the Wi-Fi permission, or with location services off (Android). On iOS a network the app joined is always named. |
+| `bssid`<Optional /> | `string` | Uppercase, colon-separated; hidden when `ssid` is. |
+| `ip`<Optional /> | `string` | The phone's IPv4 address. |
+| `gateway`<Optional /> | `string` | <Platforms android /> The IPv4 default gateway. |
+| `rssi`<Optional /> | `number` | <Platforms android /> Signal strength in dBm. |
+| `frequency`<Optional /> | `number` | <Platforms android /> Channel frequency in MHz. |
+| `linkSpeed`<Optional /> | `number` | <Platforms android /> Link speed in Mbps. |
+
+### `ScannedNetwork`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `ssid` | `string` | Empty for a network that hides its name. |
+| `bssid` | `string` | Uppercase, colon-separated. |
+| `rssi` | `number` | Signal strength in dBm. |
+| `frequency` | `number` | Channel frequency in MHz. |
+| `band` | `'2.4GHz' \| '5GHz' \| '6GHz' \| '60GHz' \| 'unknown'` | |
+| `security` | `'open' \| 'owe' \| 'wep' \| 'wpa' \| 'wpa2' \| 'wpa3' \| 'enterprise'` | The strongest the network offers. Join `wpa` and `wpa2` networks with `security: 'wpa2'`; `owe` and `enterprise` cannot be joined with `joinNetwork`. |
+| `capabilities` | `string` | The raw string, e.g. `[WPA2-PSK-CCMP][RSN-PSK-CCMP][ESS]`. |
+| `timestamp` | `number` | When the network was last seen, in milliseconds since the epoch. |
+
+### `NetworkSuggestion`
+
+| Property | Type | Description |
+| --- | --- | --- |
+| `ssid` | `string` | |
+| `password`<Optional /> | `string` | Omit for an open network. |
+| `security`<Optional /> | `'open' \| 'wpa2' \| 'wpa3'` | `'wpa2'` with a password, else `'open'`. |
+| `hidden`<Optional /> | `boolean` | |
+| `appInteractionRequired`<Optional /> | `boolean` | The system joins the network only while the app runs. |
+
+### `WifiErrorCode`
+
+| Code | Meaning |
+| --- | --- |
+| `'user-denied'` | <Platforms ios /> The user declined the system's prompt to join. |
+| `'not-found'` | <Platforms android /> The network was not in range, or the user dismissed the system's sheet. |
+| `'unreachable'` | The phone joined, but nothing accepted a connection on `waitFor` in time; the message names the last cause. |
+| `'local-network-denied'` | <Platforms ios /> iOS blocks the app from the local network; only Settings changes it. |
+| `'unauthorized'` | The permission the call needs was not granted. |
+| `'location-off'` | <Platforms android /> Location services are off, so the system hides Wi-Fi networks. |
+| `'wifi-off'` | <Platforms android /> Wi-Fi is off and the app may not turn it on (Android 10+). |
+| `'unsupported'` | Not possible on this platform or OS version: an Android-only function on iOS, or an option such as `prefix` before Android 10. |
+| `'timeout'` | The timeout passed. |
+| `'cancelled'` | The caller aborted, or a newer call replaced this one. |
+| `'not-permitted'` | <Platforms ios /> The app is in the background, where the system refuses to join. |
+| `'invalid-argument'` | An option the library or the system rejects, such as a passphrase of the wrong length. |
+| `'scan-throttled'` | <Platforms android /> Android refused the scan: 4 in 2 minutes in the foreground. |
+| `'scan-failed'` | <Platforms android /> The scan ran but produced no new results. |
+| `'join-failed'` | The system could not join or route; `nativeCode` says more. |
+| `'unknown'` | Anything else. |

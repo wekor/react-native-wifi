@@ -1,0 +1,35 @@
+---
+title: 显示当前 Wi-Fi
+---
+
+# 显示当前 Wi-Fi
+
+## 示例 {#example}
+
+```tsx
+import { Button, Text } from 'react-native';
+import { useCurrentNetwork, useWifiPermission } from '@wekor/react-native-wifi';
+
+export function WifiBadge() {
+  const [permission, requestPermission] = useWifiPermission();
+  const network = useCurrentNetwork();
+
+  if (network === undefined) return null; // 尚未获取到
+  if (network === null) return <Text>未连接 Wi-Fi</Text>;
+  if (!network.ssid && permission?.canAskAgain)
+    return <Button title="显示网络名称" onPress={requestPermission} />;
+  return <Text>{network.ssid ?? 'Wi-Fi'} · {network.ip}</Text>;
+}
+```
+
+在 React 之外，[`getCurrentNetwork()`](./api.mdx#getcurrentnetwork) 读取一次当前网络，
+[`onCurrentNetworkChange()`](./api.mdx#oncurrentnetworkchange) 则持续跟踪它的变化。
+
+## 要点 {#key-points}
+
+- **`null` 表示未连接 Wi-Fi**：正在使用移动数据，或 Wi-Fi 已关闭。
+- **名称需要 Wi-Fi 权限。** 没有该权限时，仍能拿到网络及其 IP 地址，但没有
+  `ssid` 和 `bssid`。大致位置不够。在 iOS 上，应用自己加入的网络总能拿到名称。
+- **会自动更新**：手机加入、离开或切换网络，或获得新地址时都会更新；
+  仅信号强度变化不算变化。
+- **Android 提供更多信息**：`gateway`、`rssi`、`frequency` 和 `linkSpeed`。

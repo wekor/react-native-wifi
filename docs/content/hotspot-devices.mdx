@@ -1,0 +1,90 @@
+---
+title: Connect to a device's hotspot
+---
+
+# Connect to a device's hotspot
+
+The device opens a Wi-Fi hotspot; the phone joins it and talks to the device, then goes back to its own network.
+Cameras, drones and devices being set up for the first time work this way.
+
+## Example
+
+```tsx
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Text } from 'react-native';
+import {
+  isWifiError,
+  joinNetwork,
+  requestLocalNetworkPermission,
+  type JoinedNetwork,
+  type WifiErrorCode,
+} from '@wekor/react-native-wifi';
+
+const DEVICE = { host: '192.168.4.1', port: 80 };
+
+/** Joins the device's hotspot; resolves once the device answers. */
+export async function connectToDevice(ssid: string, password: string, signal?: AbortSignal) {
+  // iOS: reaching the device needs local network access. Android resolves granted at once.
+  const { granted } = await requestLocalNetworkPermission({ signal });
+  if (!granted) throw new Error('Allow local network access in Settings.');
+
+  return joinNetwork({ ssid, password, waitFor: DEVICE, timeout: 45_000, signal });
+}
+
+/** What to tell the user, by what went wrong. */
+const MESSAGES: Partial<Record<WifiErrorCode, string>> = {
+  'user-denied': "Join the device's Wi-Fi to continue.",
+  'not-found': "The device's Wi-Fi was not found. Move closer and try again.",
+  unreachable: "Joined the device's Wi-Fi, but the device did not answer.",
+  'local-network-denied': 'Allow local network access in Settings.',
+  timeout: 'Connecting took too long. Try again.',
+};
+
+export function DeviceScreen({ ssid, password }: { ssid: string; password: string }) {
+  const [device, setDevice] = useState<JoinedNetwork>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let joined: JoinedNetwork | undefined;
+    connectToDevice(ssid, password, controller.signal)
+      .then((network) => {
+        joined = network;
+        network.onLost(() => setError('The device went away.'));
+        setDevice(network);
+      })
+      .catch((caught) => {
+        if (isWifiError(caught, 'cancelled')) return;
+        setError(isWifiError(caught) ? (MESSAGES[caught.code] ?? caught.message) : String(caught));
+      });
+    // Leaving the screen cancels a join in progress, or hands the phone back.
+    return () => {
+      controller.abort();
+      joined?.leave();
+    };
+  }, [ssid, password]);
+
+  if (error) return <Text>{error}</Text>;
+  if (!device) return <ActivityIndicator />;
+  return <DeviceControls baseUrl={`http://${DEVICE.host}`} />;
+}
+```
+
+## Key points
+
+- **Resolved means working.** `joinNetwork` resolves once the phone is on the network with an address, its traffic
+  goes there (Android), and the device accepts a connection on `waitFor`. Set `waitFor` whenever you know the
+  device's address: a hotspot comes up seconds before the service behind it.
+- **Failures clean up.** A rejection, a timeout or an abort leaves the phone where it was, with nothing left
+  configured.
+- **The system asks the user.** iOS shows an alert; Android 10+ shows a sheet of matching networks. The `timeout`
+  includes the user's time with it.
+- **Android routes traffic for you.** The hotspot has no internet, so Android would send requests over mobile data.
+  `joinNetwork` routes the app's traffic through the hotspot until `leave()`, or until the network is lost.
+- **Don't know the exact name?** `joinNetwork({ ssid: 'Device_', prefix: true })` joins any network whose name
+  starts with it. Android 10+ and iOS.
+- **iOS remembers networks.** iOS keeps a joined network configured, across launches, until the app forgets it.
+  `leave()` does; to clean up after a crash, call [`forgetNetworks()`](./api.mdx#forgetnetworks) at
+  launch.
+
+When the device still does not answer, see [Troubleshooting](./troubleshooting.mdx).

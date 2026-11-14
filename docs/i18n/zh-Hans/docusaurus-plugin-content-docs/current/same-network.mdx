@@ -1,0 +1,47 @@
+---
+title: 同一网络中的设备
+---
+
+# 同一网络中的设备
+
+设备加入某个 Wi-Fi 网络（比如家里的路由器，通常通过蓝牙配置），并上报自己的 IP 地址。
+手机留在自己的网络上；如果两者在同一网络中，就在那里与设备通信。
+
+## 示例 {#example}
+
+```ts
+import { getCurrentNetwork, probe } from '@wekor/react-native-wifi';
+
+/** 手机能否访问 `ip` 上的设备；若不能，给出提示用户的信息。 */
+export async function checkDevice(ip: string, deviceSsid: string) {
+  if (await probe(ip, 80, { timeout: 2_000 })) return { ok: true } as const;
+
+  const phone = await getCurrentNetwork();
+  if (!phone) return { ok: false, hint: '请将手机连接到 Wi-Fi。' } as const;
+  if (phone.ssid && phone.ssid !== deviceSsid)
+    return { ok: false, hint: `设备在 ${deviceSsid} 上，手机在 ${phone.ssid} 上。` } as const;
+  return { ok: false, hint: '设备没有响应。它开机了吗？' } as const;
+}
+```
+
+要让设备一开始就加入手机所在的网络，可以把该网络排在最前面：
+
+```ts
+import { getCurrentNetwork, requestWifiPermission } from '@wekor/react-native-wifi';
+
+// 读取网络名称需要 Wi-Fi 权限（底层是位置权限）。
+const { granted } = await requestWifiPermission();
+const phoneSsid = granted ? (await getCurrentNetwork())?.ssid : undefined;
+// 设备询问要加入哪个网络时，把 `phoneSsid` 排在最前面，并标注“与手机相同”。
+```
+
+## 要点 {#key-points}
+
+- **`probe` 只回答是或否。** 设备在该端口上接受 TCP 连接后，它会立即 resolve 为 `true`；
+  超时后则 resolve 为 `false`。用它在两种方式之间做选择时（例如 Wi-Fi 或
+  蓝牙），把超时设短一些。
+- **只有需要用户操作时才会 reject**：在 iOS 上，应用无权访问本地网络时，会以 `'local-network-denied'` reject。
+  请先用 [`requestLocalNetworkPermission()`](./permissions.mdx#local-network-permission) 请求权限。
+- **名称只用于帮用户选择。** 有些路由器给同一局域网中的 2.4 GHz 和 5 GHz 网络起不同的名称，
+  因此名称不同也可能互通。最终以 `probe` 的结果为准。
+- **不需要 HTTP。** 只建立连接，因此适用于任何服务：HTTP、WebSocket、RTSP 或你自己的协议。

@@ -1,0 +1,35 @@
+---
+title: Show the current Wi-Fi
+---
+
+# Show the current Wi-Fi
+
+## Example
+
+```tsx
+import { Button, Text } from 'react-native';
+import { useCurrentNetwork, useWifiPermission } from '@wekor/react-native-wifi';
+
+export function WifiBadge() {
+  const [permission, requestPermission] = useWifiPermission();
+  const network = useCurrentNetwork();
+
+  if (network === undefined) return null; // not known yet
+  if (network === null) return <Text>Not on Wi-Fi</Text>;
+  if (!network.ssid && permission?.canAskAgain)
+    return <Button title="Show network name" onPress={requestPermission} />;
+  return <Text>{network.ssid ?? 'Wi-Fi'} · {network.ip}</Text>;
+}
+```
+
+Outside React, [`getCurrentNetwork()`](./api.mdx#getcurrentnetwork) reads it once and
+[`onCurrentNetworkChange()`](./api.mdx#oncurrentnetworkchange) follows it.
+
+## Key points
+
+- **`null` means not on Wi-Fi**: on mobile data, or Wi-Fi off.
+- **The name needs the Wi-Fi permission.** Without it the network is still there, with its IP address, but without
+  `ssid` and `bssid`. Approximate location is not enough. On iOS, a network the app joined is always named.
+- **It updates on its own** when the phone joins, leaves or switches networks, or gets a new address; signal
+  strength alone is no change.
+- **Android reports more**: `gateway`, `rssi`, `frequency` and `linkSpeed`.

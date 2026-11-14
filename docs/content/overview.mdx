@@ -1,0 +1,43 @@
+---
+title: Overview
+slug: /
+hide_title: true
+---
+
+<LibraryHeader title="React Native Wi-Fi">
+  Connect a phone to a device over Wi-Fi: join its hotspot, check that it answers, and talk to it.
+</LibraryHeader>
+
+## What it does
+
+- **Join a device's hotspot**, and resolve only once the device answers, with the app's traffic routed there.
+- **Check a device on the phone's network**, whether it answers, and why not.
+- **Read the phone's Wi-Fi network**, as a value or a React hook.
+- **Ask for the permissions** this needs, local network access on iOS included.
+
+## Example
+
+```ts
+import { joinNetwork } from '@wekor/react-native-wifi';
+
+const device = await joinNetwork({
+  ssid: 'Device_1234',
+  password: 'secret123',
+  waitFor: { host: '192.168.4.1', port: 80 }, // resolves once the device answers
+});
+
+const status = await fetch('http://192.168.4.1/status').then((response) => response.json());
+await device.leave(); // the phone goes back to its own network
+```
+
+## Requirements
+
+| React Native | iOS | Android | Expo |
+| --- | --- | --- | --- |
+| 0.80+, New Architecture | 15.1+ | 7.0+ | Development builds with the included config plugin. Not Expo Go. |
+
+## Start here
+
+1. [Install](./installation.mdx) the package and its config plugin.
+2. Pick your case: the device [opens a hotspot](./hotspot-devices.mdx), or it is [on the same network](./same-network.mdx).
+3. When something does not connect, see [Troubleshooting](./troubleshooting.mdx).

@@ -1,0 +1,22 @@
+{
+  "title": {
+    "message": "React Native Wi-Fi",
+    "description": "The title in the navbar"
+  },
+  "item.label.Docs": {
+    "message": "文档",
+    "description": "Navbar item with label Docs"
+  },
+  "item.label.API reference": {
+    "message": "API 参考",
+    "description": "Navbar item with label API reference"
+  },
+  "item.label.npm": {
+    "message": "npm",
+    "description": "Navbar item with label npm"
+  },
+  "item.label.GitHub": {
+    "message": "GitHub",
+    "description": "Navbar item with label GitHub"
+  }
+}

@@ -1,0 +1,10 @@
+<!--
+  The permissions the system grants at install. Location and NEARBY_WIFI_DEVICES are runtime permissions the app
+  declares itself (the config plugin does): whether it may ask for location is the app's decision.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+</manifest>

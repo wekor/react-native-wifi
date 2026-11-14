@@ -1,0 +1,79 @@
+---
+title: Android only
+---
+
+# Android only
+
+iOS does not let apps scan for networks, switch Wi-Fi or suggest networks. These functions reject with
+`'unsupported'` on iOS (`onWifiEnabledChange` throws it), so check the platform where you use them.
+
+## Pick from nearby networks
+
+```tsx
+import { Platform } from 'react-native';
+import { getScanResults, isWifiError, scanNetworks, type ScannedNetwork } from '@wekor/react-native-wifi';
+
+async function nearbyDevices(): Promise<ScannedNetwork[]> {
+  // Android allows 4 scans in 2 minutes; past that, use the last results.
+  const networks = await scanNetworks().catch((error) =>
+    isWifiError(error, 'scan-throttled') ? getScanResults() : Promise.reject(error)
+  );
+  return networks.filter((network) => network.ssid.startsWith('Device_'));
+}
+
+export function ChooseDevice({ onChoose }: { onChoose: (ssid: string) => void }) {
+  // iOS cannot scan: ask for the name instead, or join by prefix.
+  if (Platform.OS !== 'android') return <SsidField onSubmit={onChoose} />;
+  return <NetworkList load={nearbyDevices} onChoose={onChoose} />;
+}
+```
+
+Scanning needs the [Wi-Fi permission](./permissions.mdx), and before Android 13 location services on. Often a scan
+is not needed at all: `joinNetwork({ ssid: 'Device_', prefix: true })` has the system list the matching networks.
+
+## The Wi-Fi switch
+
+Only the user can turn Wi-Fi on (Android 10+). Open the panel and continue when they do:
+
+```ts
+import { isWifiEnabled, onWifiEnabledChange, openWifiSettings } from '@wekor/react-native-wifi';
+
+if (!(await isWifiEnabled())) {
+  const remove = onWifiEnabledChange((enabled) => {
+    if (!enabled) return;
+    remove();
+    continueSetup();
+  });
+  await openWifiSettings();
+}
+```
+
+## Network suggestions
+
+Networks the system may join on its own, as it does saved ones, after the user approves the app once. Unlike
+`joinNetwork`, they serve the whole phone and outlast the app. Android 10+.
+
+```ts
+import { addNetworkSuggestions, removeNetworkSuggestions } from '@wekor/react-native-wifi';
+
+await addNetworkSuggestions([{ ssid: 'Home', password: 'secret123' }]);
+await removeNetworkSuggestions(['Home']); // or removeNetworkSuggestions() for all
+```
+
+## Routing traffic through Wi-Fi
+
+`joinNetwork` routes the app's traffic through the network it joined. When the user joined the device's network in
+Settings instead, route it yourself, as Android otherwise prefers mobile data over a network without internet:
+
+```ts
+import { bindProcessToWifi, unbindProcess } from '@wekor/react-native-wifi';
+
+await bindProcessToWifi();
+try {
+  await fetch('http://192.168.4.1/config', { method: 'POST', body });
+} finally {
+  await unbindProcess();
+}
+```
+
+These two also work on iOS, where they resolve at once: iOS needs no binding.

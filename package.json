@@ -1,0 +1,135 @@
+{
+  "name": "@wekor/react-native-wifi",
+  "version": "0.1.0",
+  "description": "Wi-Fi for React Native: join networks and hotspots, read the current network, scan.",
+  "main": "./lib/module/index.js",
+  "types": "./lib/typescript/src/index.d.ts",
+  "exports": {
+    ".": {
+      "source": "./src/index.ts",
+      "types": "./lib/typescript/src/index.d.ts",
+      "default": "./lib/module/index.js"
+    },
+    "./plugin": {
+      "types": "./plugin/build/index.d.ts",
+      "default": "./plugin/build/index.js"
+    },
+    "./package.json": "./package.json",
+    "./app.plugin.js": "./app.plugin.js"
+  },
+  "files": [
+    "src",
+    "lib",
+    "android",
+    "ios",
+    "*.podspec",
+    "app.plugin.js",
+    "plugin/build",
+    "!ios/build",
+    "!android/build",
+    "!android/gradle",
+    "!android/gradlew",
+    "!android/gradlew.bat",
+    "!android/local.properties",
+    "!**/__tests__",
+    "!**/__fixtures__",
+    "!**/__mocks__",
+    "!**/.*"
+  ],
+  "scripts": {
+    "example": "bun run --cwd example",
+    "check": "biome check",
+    "fix": "biome check --write",
+    "format": "biome format --write",
+    "clean": "del-cli lib plugin/build",
+    "prepare": "lefthook install && bob build && tsc -p plugin",
+    "typecheck": "tsc && tsc -p tsconfig.test.json && tsc -p example && tsc -p plugin --noEmit",
+    "build:android:prepare": "bun run example expo prebuild --platform android --no-install",
+    "build:android": "./example/android/gradlew --project-dir example/android :wekor_react-native-wifi:assembleDebug",
+    "build:ios:prepare": "bun run example expo prebuild --platform ios",
+    "build:ios": "xcodebuild -workspace example/ios/WiFiExample.xcworkspace -scheme WiFiExample -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build -quiet",
+    "test": "bun test src plugin"
+  },
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "wifi",
+    "hotspot",
+    "ssid",
+    "network"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wekor/react-native-wifi.git"
+  },
+  "author": "wekor",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/wekor/react-native-wifi/issues"
+  },
+  "homepage": "https://github.com/wekor/react-native-wifi#readme",
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org/"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.3",
+    "@commitlint/config-conventional": "^20.5.3",
+    "@react-native/babel-preset": "0.88.1",
+    "@types/bun": "^1.4.4",
+    "@types/react": "^19.2.0",
+    "commitlint": "^20.5.3",
+    "del-cli": "^8.0.1",
+    "expo": "~58.0.24",
+    "lefthook": "^2.1.9",
+    "react": "19.3.0",
+    "react-native": "0.88.1",
+    "react-native-builder-bob": "^0.44.1",
+    "typescript": "^6.0.3"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": ">=0.80.0"
+  },
+  "peerDependenciesMeta": {
+    "expo": {
+      "optional": true
+    }
+  },
+  "workspaces": [
+    "example"
+  ],
+  "packageManager": "bun@1.4.4",
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  },
+  "react-native-builder-bob": {
+    "source": "src",
+    "output": "lib",
+    "targets": [
+      [
+        "module",
+        {
+          "esm": true
+        }
+      ],
+      [
+        "typescript",
+        {
+          "project": "tsconfig.build.json"
+        }
+      ]
+    ]
+  },
+  "codegenConfig": {
+    "name": "ReactNativeWifiSpec",
+    "type": "modules",
+    "jsSrcsDir": "src",
+    "android": {
+      "javaPackageName": "com.wekor.reactnativewifi"
+    }
+  }
+}

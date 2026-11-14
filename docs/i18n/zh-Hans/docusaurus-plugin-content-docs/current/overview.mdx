@@ -1,0 +1,43 @@
+---
+title: 概览
+slug: /
+hide_title: true
+---
+
+<LibraryHeader title="React Native Wi-Fi">
+  通过 Wi-Fi 把手机连接到设备：加入设备的热点，确认设备能响应，然后与它通信。
+</LibraryHeader>
+
+## 功能 {#what-it-does}
+
+- **加入设备的热点**，设备响应后才 resolve，并让 App 的流量走这个热点。
+- **检查手机所在网络中的设备**：是否响应，以及为什么不响应。
+- **读取手机当前的 Wi-Fi 网络**，可以直接取值，也可以用 React hook。
+- **请求所需的权限**，包括 iOS 的本地网络权限。
+
+## 示例 {#example}
+
+```ts
+import { joinNetwork } from '@wekor/react-native-wifi';
+
+const device = await joinNetwork({
+  ssid: 'Device_1234',
+  password: 'secret123',
+  waitFor: { host: '192.168.4.1', port: 80 }, // 设备响应后才 resolve
+});
+
+const status = await fetch('http://192.168.4.1/status').then((response) => response.json());
+await device.leave(); // 手机回到它原来的网络
+```
+
+## 要求 {#requirements}
+
+| React Native | iOS | Android | Expo |
+| --- | --- | --- | --- |
+| 0.80+，新架构 | 15.1+ | 7.0+ | 使用自带 config plugin 的开发构建 (development build)。不支持 Expo Go。 |
+
+## 从这里开始 {#start-here}
+
+1. [安装](./installation.mdx)本包及其 config plugin。
+2. 选择你的场景：设备[开启热点](./hotspot-devices.mdx)，或者设备[在同一网络中](./same-network.mdx)。
+3. 连接不上时，参见[故障排查](./troubleshooting.mdx)。

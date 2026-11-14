@@ -1,0 +1,90 @@
+---
+title: 连接设备的热点
+---
+
+# 连接设备的热点
+
+设备开启 Wi-Fi 热点，手机加入后与设备通信，完成后再回到自己的网络。
+相机、无人机以及首次配置的设备都是这样工作的。
+
+## 示例 {#example}
+
+```tsx
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Text } from 'react-native';
+import {
+  isWifiError,
+  joinNetwork,
+  requestLocalNetworkPermission,
+  type JoinedNetwork,
+  type WifiErrorCode,
+} from '@wekor/react-native-wifi';
+
+const DEVICE = { host: '192.168.4.1', port: 80 };
+
+/** 加入设备的热点；设备响应后 resolve。 */
+export async function connectToDevice(ssid: string, password: string, signal?: AbortSignal) {
+  // iOS：访问设备需要本地网络权限。Android 会立即 resolve 为 granted。
+  const { granted } = await requestLocalNetworkPermission({ signal });
+  if (!granted) throw new Error('请在设置中开启本地网络权限。');
+
+  return joinNetwork({ ssid, password, waitFor: DEVICE, timeout: 45_000, signal });
+}
+
+/** 根据出错原因，告诉用户该怎么做。 */
+const MESSAGES: Partial<Record<WifiErrorCode, string>> = {
+  'user-denied': '请加入设备的 Wi-Fi 以继续。',
+  'not-found': '未找到设备的 Wi-Fi。请靠近一些再试。',
+  unreachable: '已加入设备的 Wi-Fi，但设备没有响应。',
+  'local-network-denied': '请在设置中开启本地网络权限。',
+  timeout: '连接超时，请重试。',
+};
+
+export function DeviceScreen({ ssid, password }: { ssid: string; password: string }) {
+  const [device, setDevice] = useState<JoinedNetwork>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let joined: JoinedNetwork | undefined;
+    connectToDevice(ssid, password, controller.signal)
+      .then((network) => {
+        joined = network;
+        network.onLost(() => setError('与设备的连接已断开。'));
+        setDevice(network);
+      })
+      .catch((caught) => {
+        if (isWifiError(caught, 'cancelled')) return;
+        setError(isWifiError(caught) ? (MESSAGES[caught.code] ?? caught.message) : String(caught));
+      });
+    // 离开页面时，取消正在进行的加入，或让手机回到原来的网络。
+    return () => {
+      controller.abort();
+      joined?.leave();
+    };
+  }, [ssid, password]);
+
+  if (error) return <Text>{error}</Text>;
+  if (!device) return <ActivityIndicator />;
+  return <DeviceControls baseUrl={`http://${DEVICE.host}`} />;
+}
+```
+
+## 要点 {#key-points}
+
+- **resolve 即可用。** 手机已加入网络并获得地址、流量走该网络（Android），
+  且设备在 `waitFor` 上接受连接后，`joinNetwork` 才会 resolve。只要知道设备的地址，就设置 `waitFor`：
+  热点会比其背后的服务早几秒就绪。
+- **失败会自动清理。** reject、超时或中止后，手机保持原样，
+  不会留下任何配置。
+- **由系统询问用户。** iOS 会显示弹窗；Android 10+ 会显示匹配网络的列表。`timeout`
+  包含用户操作所花的时间。
+- **Android 会替你让流量走热点。** 热点没有互联网，Android 原本会把请求发往移动数据。
+  `joinNetwork` 会让应用的流量走该热点，直到调用 `leave()` 或网络丢失。
+- **不知道确切名称？** `joinNetwork({ ssid: 'Device_', prefix: true })` 会加入名称以此开头的任意网络。
+  支持 Android 10+ 和 iOS。
+- **iOS 会记住网络。** 已加入的网络配置会一直保留在 iOS 上，应用重启后依然存在，直到应用忘记它。
+  `leave()` 会忘记它；要在崩溃后清理，请在启动时调用
+  [`forgetNetworks()`](./api.mdx#forgetnetworks)。
+
+如果设备仍然没有响应，请参阅[故障排除](./troubleshooting.mdx)。

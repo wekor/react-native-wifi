@@ -1,0 +1,79 @@
+---
+title: 仅限 Android
+---
+
+# 仅限 Android
+
+iOS 不允许应用扫描网络、开关 Wi-Fi 或建议网络。这些函数在 iOS 上会以
+`'unsupported'` reject（`onWifiEnabledChange` 则直接抛出），因此请在调用处检查平台。
+
+## 从附近网络中选择 {#pick-from-nearby-networks}
+
+```tsx
+import { Platform } from 'react-native';
+import { getScanResults, isWifiError, scanNetworks, type ScannedNetwork } from '@wekor/react-native-wifi';
+
+async function nearbyDevices(): Promise<ScannedNetwork[]> {
+  // Android 允许 2 分钟内扫描 4 次；超出后，使用上次的结果。
+  const networks = await scanNetworks().catch((error) =>
+    isWifiError(error, 'scan-throttled') ? getScanResults() : Promise.reject(error)
+  );
+  return networks.filter((network) => network.ssid.startsWith('Device_'));
+}
+
+export function ChooseDevice({ onChoose }: { onChoose: (ssid: string) => void }) {
+  // iOS 无法扫描：改为让用户输入名称，或按前缀加入。
+  if (Platform.OS !== 'android') return <SsidField onSubmit={onChoose} />;
+  return <NetworkList load={nearbyDevices} onChoose={onChoose} />;
+}
+```
+
+扫描需要 [Wi-Fi 权限](./permissions.mdx)，在 Android 13 之前还需开启定位服务。很多时候
+根本不需要扫描：`joinNetwork({ ssid: 'Device_', prefix: true })` 会让系统列出匹配的网络。
+
+## Wi-Fi 开关 {#the-wi-fi-switch}
+
+只有用户才能打开 Wi-Fi（Android 10+）。打开设置面板，等用户打开后再继续：
+
+```ts
+import { isWifiEnabled, onWifiEnabledChange, openWifiSettings } from '@wekor/react-native-wifi';
+
+if (!(await isWifiEnabled())) {
+  const remove = onWifiEnabledChange((enabled) => {
+    if (!enabled) return;
+    remove();
+    continueSetup();
+  });
+  await openWifiSettings();
+}
+```
+
+## 网络建议 {#network-suggestions}
+
+用户批准应用一次后，系统就可以像对待已保存的网络那样，自行加入这些网络。与
+`joinNetwork` 不同，它们作用于整部手机，并且在应用退出后依然有效。Android 10+。
+
+```ts
+import { addNetworkSuggestions, removeNetworkSuggestions } from '@wekor/react-native-wifi';
+
+await addNetworkSuggestions([{ ssid: 'Home', password: 'secret123' }]);
+await removeNetworkSuggestions(['Home']); // 或调用 removeNetworkSuggestions() 移除全部
+```
+
+## 让流量走 Wi-Fi {#routing-traffic-through-wi-fi}
+
+`joinNetwork` 会让应用的流量走它加入的网络。如果用户是在设置中自行加入设备网络的，
+就需要你自己让流量走 Wi-Fi，否则 Android 会优先使用移动数据，而不是没有互联网的网络：
+
+```ts
+import { bindProcessToWifi, unbindProcess } from '@wekor/react-native-wifi';
+
+await bindProcessToWifi();
+try {
+  await fetch('http://192.168.4.1/config', { method: 'POST', body });
+} finally {
+  await unbindProcess();
+}
+```
+
+这两个函数在 iOS 上也能用，会立即 resolve：iOS 不需要绑定。

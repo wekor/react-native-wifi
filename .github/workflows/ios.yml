@@ -1,0 +1,38 @@
+name: iOS
+# Runs only when something the iOS build depends on changes. Keep the shared
+# paths in sync with android.yml. merge_group ignores path filters, so a merge
+# queue always runs it.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ios/**
+      - '*.podspec'
+      # Shared with Android
+      - src/**
+      - plugin/src/**
+      - example/**
+      # Dependency changes reach bun.lock; the release PR's version bump in
+      # package.json doesn't need a native build.
+      - bun.lock
+      - .nvmrc
+      - .bun-version
+      - bunfig.toml
+      - .github/actions/**
+      - .github/workflows/ios.yml
+  merge_group:
+    types: [checks_requested]
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  build:
+    name: iOS build
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
+      - run: bun run build:ios:prepare
+      - run: bun run build:ios

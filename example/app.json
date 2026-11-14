@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "WiFi Example",
+    "slug": "react-native-wifi-example",
+    "scheme": "wifiexample",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.wekor.wifi.example",
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Reaches devices on the network you join, and the development server."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.wekor.wifi.example"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "../app.plugin.js",
+        {
+          "locationPermission": "Allow $(PRODUCT_NAME) to read the name of the Wi-Fi network you are on"
+        }
+      ],
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
+  }
+}

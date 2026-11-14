@@ -1,0 +1,55 @@
+---
+title: 权限
+---
+
+# 权限
+
+## 需要哪个权限 {#which-one-you-need}
+
+| 用途 | Wi-Fi 权限 | 本地网络权限 |
+| --- | --- | --- |
+| 加入设备的热点 | 不需要（Android 9 及更早版本：需要） | iOS：需要，用于与设备通信 |
+| 与同一网络中的设备通信 | 不需要 | iOS：需要 |
+| 读取手机当前网络的名称 | 需要（iOS：App 自己加入的网络除外） | 不需要 |
+| 扫描（Android） | 需要 | 不需要 |
+
+两个权限都不会自动请求：在用户即将用到时再请求。
+
+## Wi-Fi 权限 {#wi-fi-permission}
+
+用于读取网络名称和扫描。两个系统都把网络名称视为位置信息，所以它底层就是位置权限，在 Android
+13+ 上还包括“附近的 Wi-Fi 设备”权限。
+
+```ts
+import { Linking } from 'react-native';
+import { requestWifiPermission } from '@wekor/react-native-wifi';
+
+const { granted, canAskAgain } = await requestWifiPermission();
+if (!granted && !canAskAgain) Linking.openSettings(); // 系统不会再弹窗询问
+```
+
+- [`getWifiPermission()`](./api.mdx#getwifipermission) 只读取状态，不发起请求；
+  [`useWifiPermission()`](./api.mdx#usewifipermission) 把它保存在 React state 中。
+- **大致位置等同于拒绝**：它永远拿不到网络名称。
+- **它和 expo-location 是同一个系统权限**：通过任意一方授予，两边都算已授权。
+
+## 本地网络权限 {#local-network-permission}
+
+iOS 14+ 在用户允许之前会阻止 App 访问本地网络，而且不会有任何提示：
+设备看起来只是不能连通。与设备通信前先请求权限：
+
+```ts
+import { requestLocalNetworkPermission } from '@wekor/react-native-wifi';
+
+const { granted } = await requestLocalNetworkPermission();
+if (!granted) showMessage('请在设置中开启本地网络权限。');
+```
+
+- **Android 没有这项权限**：会立即以已授权 resolve。
+- **没有 `get` 方法。** iOS 没有读取这项权限的 API；本库通过广播一个 Bonjour
+  服务并搜索它来得到结果，弹窗正是由此出现。
+- **用户回答后才 resolve。** 第一次是在用户点“允许”或“不允许”之后；此后被拒绝时立即返回，
+  已允许时约 1 秒返回。
+- **它需要两个 `Info.plist` 条目**，由 config plugin 的 `localNetworkPermission` 添加：
+  `NSLocalNetworkUsageDescription`，以及 `NSBonjourServices` 中的 `_preflight_check._tcp`。缺少任一项时，会以
+  `'unsupported'` reject，并指出缺少的是哪一项。不使用 Expo 时，参见[安装](./installation.mdx#without-expo)。

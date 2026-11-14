@@ -1,0 +1,38 @@
+buildscript {
+  ext.ReactNativeWifi = [
+    minSdkVersion: 24,
+    compileSdkVersion: 36,
+    targetSdkVersion: 36
+  ]
+
+  ext.getExtOrDefault = { prop ->
+    if (rootProject.ext.has(prop)) {
+      return rootProject.ext.get(prop)
+    }
+
+    return ReactNativeWifi[prop]
+  }
+}
+
+apply plugin: "com.android.library"
+// AGP 9 registers the `kotlin` extension itself; applying the plugin on top of it fails.
+if (project.extensions.findByName("kotlin") == null) {
+  apply plugin: "kotlin-android"
+}
+
+apply plugin: "com.facebook.react"
+
+android {
+  namespace "com.wekor.reactnativewifi"
+
+  compileSdkVersion getExtOrDefault("compileSdkVersion")
+
+  defaultConfig {
+    minSdkVersion getExtOrDefault("minSdkVersion")
+    targetSdkVersion getExtOrDefault("targetSdkVersion")
+  }
+}
+
+dependencies {
+  implementation "com.facebook.react:react-android"
+}

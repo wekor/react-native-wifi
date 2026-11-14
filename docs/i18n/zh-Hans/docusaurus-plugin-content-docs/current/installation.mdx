@@ -1,0 +1,118 @@
+---
+title: 安装
+---
+
+# 安装
+
+## Expo {#expo}
+
+```sh
+npx expo install @wekor/react-native-wifi
+```
+
+将 config plugin 添加到 `app.config.ts`（或 `app.json`）：
+
+```ts
+import type { ExpoConfig } from 'expo/config';
+import type { WifiPluginProps } from '@wekor/react-native-wifi/plugin';
+
+export default {
+  name: 'my-app',
+  slug: 'my-app',
+  plugins: [
+    [
+      '@wekor/react-native-wifi',
+      {
+        // 显示在 iOS 自带的标题（“想要查找并连接到您本地网络上的设备”）下方：
+        // 写明 App 为什么需要它。
+        localNetworkPermission: '此 App 需要访问本地网络，以便与你的设备通信。',
+        // 显示在 iOS 的定位权限弹窗中：写明为什么要读取 Wi-Fi 名称。
+        locationPermission: '此 App 需要位置权限，以便显示手机当前连接的 Wi-Fi 网络。',
+      } satisfies WifiPluginProps,
+    ],
+  ],
+} satisfies ExpoConfig;
+```
+
+然后构建 App：
+
+```sh
+npx expo prebuild   # 也可以交给 `npx expo run:ios`、`npx expo run:android` 或 EAS Build 运行
+```
+
+本库包含原生代码，因此需要[开发构建 (development build)](https://docs.expo.dev/develop/development-builds/introduction/)；不能在
+Expo Go 中运行。
+
+### 插件添加的内容 {#what-the-plugin-adds}
+
+| 平台 | 添加的内容 |
+| --- | --- |
+| iOS | `NSLocalNetworkUsageDescription`、`NSLocationWhenInUseUsageDescription`、`NSBonjourServices` 中的 `_preflight_check._tcp`，以及 Hotspot Configuration 和 Access Wi-Fi Information 两个 entitlement。传入的文案会覆盖原有的；不传时，已有的文案（App 自己或其他插件，如 expo-location 设置的）会保留。 |
+| Android | `ACCESS_FINE_LOCATION`、`ACCESS_COARSE_LOCATION`，以及带 `neverForLocation` 的 `NEARBY_WIFI_DEVICES`。Wi-Fi 和网络状态权限由本库自身的 manifest 添加。 |
+
+### 选项 {#options}
+
+| 选项 | 默认值 | |
+| --- | --- | --- |
+| `localNetworkPermission` | `'This app needs local network access to communicate with your devices.'` | <Platforms ios /> 本地网络权限弹窗的文本；设为 `false` 时既不添加它，也不添加 Bonjour 服务。 |
+| `locationPermission` | `'This app needs location access to show the Wi-Fi network your phone is connected to.'` | <Platforms ios /> 位置权限弹窗的文本；设为 `false` 时不添加。 |
+| `hotspotConfiguration` | `true` | <Platforms ios /> [`joinNetwork`](./api.mdx#joinnetwork) 所需的 entitlement。 |
+| `wifiInfo` | `true` | <Platforms ios /> 读取网络名称所需的 entitlement。 |
+| `androidLocation` | `true` | <Platforms android /> 声明位置权限，读取网络名称需要它。 |
+| `neverForLocation` | `true` | <Platforms android /> 声明 `NEARBY_WIFI_DEVICES` 不用于定位；如果 App 会根据扫描结果推断位置，设为 `false`。 |
+
+### 发布前 {#before-you-ship}
+
+- **iOS capabilities**：为 App ID 启用 Hotspot Configuration 和 Access Wi-Fi Information。EAS Build
+  会自动完成；否则请在 Apple Developer 门户中操作。
+- **Android 上的明文 HTTP**：release 构建默认拒绝 `http://`，除非显式允许；debug 构建则允许。要通过
+  HTTP 与设备通信，用 [`expo-build-properties`](https://docs.expo.dev/versions/latest/sdk/build-properties/)
+  放开（`npx expo install expo-build-properties`）。iOS 访问 IP 地址的 `http://` 无需配置。
+
+  ```ts
+  plugins: [['expo-build-properties', { android: { usesCleartextTraffic: true } }]],
+  ```
+
+- **改了选项？** 重新运行 `npx expo prebuild`，插件会更新它添加过的内容。
+
+## 不使用 Expo {#without-expo}
+
+安装本包，在 `ios/` 中运行 `pod install`，然后手动添加插件本该添加的内容。
+
+`ios/<App>/Info.plist`：
+
+```xml
+<key>NSLocalNetworkUsageDescription</key>
+<string>此 App 需要访问本地网络，以便与你的设备通信。</string>
+<key>NSBonjourServices</key>
+<array>
+  <string>_preflight_check._tcp</string>
+</array>
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>此 App 需要位置权限，以便显示手机当前连接的 Wi-Fi 网络。</string>
+```
+
+`ios/<App>/<App>.entitlements`：
+
+```xml
+<key>com.apple.developer.networking.HotspotConfiguration</key>
+<true/>
+<key>com.apple.developer.networking.wifi-info</key>
+<true/>
+```
+
+`android/app/src/main/AndroidManifest.xml`：
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
+                   android:usesPermissionFlags="neverForLocation"
+                   tools:targetApi="tiramisu" />
+
+  <!-- 仅在通过明文 HTTP 与设备通信时需要 -->
+  <application android:usesCleartextTraffic="true" />
+</manifest>
+```

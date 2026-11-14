@@ -1,0 +1,50 @@
+---
+title: Troubleshooting
+---
+
+# Troubleshooting
+
+## Joined, but the device does not answer
+
+Most common first:
+
+| Cause | You see | Fix |
+| --- | --- | --- |
+| iOS blocks the local network | `'local-network-denied'` | [`requestLocalNetworkPermission()`](./permissions.mdx#local-network-permission) before joining; once denied, only Settings changes it. |
+| The device's service starts after its hotspot | `'unreachable'`, "connection was refused" | A longer `timeout`. |
+| Plain HTTP blocked (Android release builds) | `probe` is `true`, `fetch` fails | Allow cleartext: see [Installation](./installation.mdx#before-you-ship). |
+| A VPN captures local traffic | `'unreachable'`, "a VPN carried the attempt" | Exclude local networks in the VPN, or turn it off. |
+| The phone left the hotspot for mobile data | `onLost` runs (Android) | Some phones leave Wi-Fi without internet after a while; join again. |
+
+## The join sheet on Android
+
+- **Dismissed before the network shows up.** While the sheet still searches, some phones (Samsung, for one) close
+  it without telling the app; the join then ends at its `timeout` rather than with `'not-found'`. Keep the timeout
+  to what you would wait for anyway.
+- **A "couldn't connect" dialog after a timeout.** When a join gives up, some phones show it, and the next join's
+  sheet stays behind it until the user taps OK.
+- **The phone's own hotspot is on.** Many phones turn Wi-Fi off while they share their connection, so the join
+  rejects with `'wifi-off'` before any sheet shows.
+
+## Android 9 and 10
+
+- **Android 9 and earlier: `leave()` keeps a network the user saved.** The join used the user's saved entry, which
+  the app may not remove or disable, so the phone stays on it.
+- **Android 9 and earlier: joining just as Wi-Fi turns on.** `joinNetwork` turns Wi-Fi on itself, and a join made
+  while it is still starting can fail; try again.
+- **Android 10: a suggestion changed after a restart.** Suggesting a network again with a new password in a later
+  launch keeps the old one. Remove the suggestion first.
+
+## Errors to show the user
+
+| `code` | Meaning | Tell the user |
+| --- | --- | --- |
+| `'user-denied'` | <Platforms ios /> Declined the join alert. | They need to join the device's Wi-Fi. |
+| `'not-found'` | <Platforms android /> Network not in range, or the sheet dismissed. | Move closer and try again. |
+| `'unreachable'` | Joined, but the device did not answer `waitFor`. | Check the device is on; try again. |
+| `'local-network-denied'` | <Platforms ios /> Local network access denied. | Allow it in Settings. |
+| `'wifi-off'` | <Platforms android /> Wi-Fi is off, often because the phone's hotspot is on. | Turn off the hotspot and turn Wi-Fi on: [`openWifiSettings()`](./api.mdx#openwifisettings). |
+| `'timeout'` | Took longer than `timeout`. | Try again. |
+| `'cancelled'` | Your `signal` aborted, or a newer join replaced this one. | Nothing: you did it. |
+
+Every error is a [`WifiError`](./api.mdx#wifierror); the full list is in the [API reference](./api.mdx#wifierrorcode).

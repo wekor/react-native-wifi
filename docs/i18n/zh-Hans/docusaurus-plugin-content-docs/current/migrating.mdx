@@ -1,0 +1,98 @@
+---
+title: 从 react-native-wifi-reborn 迁移
+---
+
+# 从 react-native-wifi-reborn 迁移
+
+大多数 wifi-reborn 调用在这里都对应一个调用；有几个则变成了
+[`getCurrentNetwork()`](./api.mdx#getcurrentnetwork) 返回值中的一个字段。reject 的错误都是 [`WifiError`](./api.mdx#wifierror)：
+请根据 `code` 分支，而不是比较字符串。
+
+## 加入网络 {#joining}
+
+| react-native-wifi-reborn | @wekor/react-native-wifi |
+| --- | --- |
+| `connectToProtectedSSID(ssid, password, isWEP, isHidden)` | `joinNetwork({ ssid, password, security: isWEP ? 'wep' : undefined, hidden: isHidden })` |
+| `connectToProtectedWifiSSID({ ssid, password, isHidden, timeout })` | `joinNetwork({ ssid, password, hidden, timeout: timeout * 1000 })`：单位为毫秒，两个平台均如此。 |
+| `connectToSSID(ssid)` | `joinNetwork({ ssid })` |
+| `connectToProtectedSSIDOnce(ssid, password, isWEP, joinOnce)` | `joinNetwork({ ssid, password, joinOnce })` |
+| `connectToSSIDPrefix(prefix)`, `connectToProtectedSSIDPrefix(prefix, password, isWEP)` | `joinNetwork({ ssid: prefix, prefix: true, password })`，Android 10+ 上同样可用。 |
+| 加入后轮询设备，直到其响应 | `joinNetwork({ ..., waitFor: { host, port } })` |
+| `disconnectFromSSID(ssid)`（iOS）、`disconnect()`（Android） | 两个平台均使用 `network.leave()`，或 `forgetNetworks([ssid])`。 |
+| `isRemoveWifiNetwork(ssid)` | `forgetNetworks([ssid])` |
+| `suggestWifiNetwork(configs)` | `addNetworkSuggestions(suggestions)`：`isWpa3` 变为 `security: 'wpa3'`，`isAppInteractionRequired` 变为 `appInteractionRequired`。 |
+| `forceWifiUsageWithOptions(true, { noInternet })` | 由 `joinNetwork` 自动完成；否则使用 `bindProcessToWifi({ requireInternet: !noInternet })`。 |
+| `forceWifiUsageWithOptions(false)`, `forceWifiUsage(false)` | `unbindProcess()`；离开或丢失网络时会自动解除绑定。 |
+
+行为上的变化：
+
+- **Promise 在手机已加入网络并获得地址时 resolve**，iOS 上也是如此，而不是在
+  系统接受请求时；设置了 `waitFor` 时，则在设备响应时 resolve。
+- **一个 `timeout` 限定全部过程**，包括用户处理弹窗的时间；`AbortSignal` 可用于取消。
+- **失败、取消和超时的加入都会被撤销**：iOS 会忘记用户已同意的配置。
+- **Android 会替你处理流量走向**，并在 `leave()` 或网络丢失时切回；wifi-reborn
+  则会让进程一直保持绑定。
+- **网络丢失会被报告**：通过 [`onLost()`](./api.mdx#joinednetwork)，而不是等到之后某个请求失败。
+
+## 访问设备 {#reaching-the-device}
+
+| 之前 | @wekor/react-native-wifi |
+| --- | --- |
+| 每次尝试带超时、尝试之间有停顿的 `fetch` 循环 | `probe(host, port, { timeout })` |
+| `@wekor/react-native-local-network-permission` 的 `requestPermission()` | `requestLocalNetworkPermission()`，返回 `PermissionResponse`（看 `granted`），而不是布尔值。探测方式和服务名 `_preflight_check._tcp` 都相同，已有的 `NSBonjourServices` 条目可以继续用；没有的话，插件的 `localNetworkPermission` 会自动添加。 |
+
+## 当前网络 {#the-current-network}
+
+| react-native-wifi-reborn | @wekor/react-native-wifi |
+| --- | --- |
+| `getCurrentWifiSSID()` | `(await getCurrentNetwork())?.ssid`。没有权限时该字段缺失，而不是 reject。 |
+| `getBSSID()` | `(await getCurrentNetwork())?.bssid` |
+| `getIP()` | `(await getCurrentNetwork())?.ip`，iOS 上同样可用。 |
+| `getCurrentSignalStrength()` | `(await getCurrentNetwork())?.rssi`（Android） |
+| `getFrequency()` | `(await getCurrentNetwork())?.frequency`（Android） |
+| `connectionStatus()` | `(await getCurrentNetwork()) !== null` |
+| — | [`onCurrentNetworkChange()`](./api.mdx#oncurrentnetworkchange), [`useCurrentNetwork()`](./api.mdx#usecurrentnetwork) |
+
+wifi-reborn 的 `getCurrentWifiSSID()` 在 iOS 上会自行请求定位权限，其 Android 上的加入也要求定位
+权限。在这里，应用在自己选择的时机通过 [`requestWifiPermission()`](./api.mdx#requestwifipermission) 请求权限，
+而且只有在 Android 9 及更早版本上加入网络才需要该权限。
+
+## Android {#android}
+
+| react-native-wifi-reborn | @wekor/react-native-wifi |
+| --- | --- |
+| `loadWifiList()` | `getScanResults()` |
+| `reScanAndLoadWifiList()` | `scanNetworks()`：以 `'scan-throttled'` reject，而不是 resolve 为一条消息字符串。 |
+| `isEnabled()` | `isWifiEnabled()` |
+| `setEnabled(enabled)` | `openWifiSettings()`：自 Android 10 起只有用户能开关 Wi-Fi。 |
+| `openWifiSettings()` | `openWifiSettings()` |
+| — | `onWifiEnabledChange()` |
+
+在 iOS 上调用时，这些函数会以 `'unsupported'` reject，而不是因 `undefined is not a function` 而失败。
+
+扫描结果的字段已重命名并带有类型：`SSID` → `ssid`，`BSSID` → `bssid`，`level` → `rssi`，`timestamp`
+为自 epoch 起的毫秒数；`band` 和 `security` 为新增字段。隐藏网络的 `ssid` 为 `''`，而不是
+`'(hidden SSID)'`。
+
+## Config plugin {#config-plugin}
+
+| react-native-wifi-reborn | @wekor/react-native-wifi |
+| --- | --- |
+| `'react-native-wifi-reborn'` | `'@wekor/react-native-wifi'` |
+| `fineLocationPermission: false` | `androidLocation: false` |
+| — | `locationPermission`, `localNetworkPermission`, `hotspotConfiguration`, `wifiInfo`, `neverForLocation`；参见[安装](./installation.mdx#options)。 |
+
+## 错误码 {#error-codes}
+
+| react-native-wifi-reborn | `WifiError.code` |
+| --- | --- |
+| `userDenied` | `'user-denied'` |
+| `locationPermissionMissing`, `locationPermissionDenied`, `locationPermissionRestricted` | `'unauthorized'` |
+| `locationServicesOff` | `'location-off'` |
+| `couldNotEnableWifi` | `'wifi-off'` |
+| `didNotFindNetwork` | `'not-found'` |
+| `timeoutOccurred` | `'timeout'` |
+| `invalidSSID`, `invalidSSIDPrefix`, `invalidPassphrase`, `invalid` | `'invalid-argument'` |
+| `unavailableForOSVersion` | `'unsupported'` |
+| `couldNotScan` | `'scan-throttled'` |
+| `unableToConnect`, `authenticationErrorOccurred`, `android10ImmediatelyDroppedConnection` | `'join-failed'`，手机始终未加入网络时为 `'timeout'` |

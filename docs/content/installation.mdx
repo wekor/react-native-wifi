@@ -1,0 +1,118 @@
+---
+title: Installation
+---
+
+# Installation
+
+## Expo
+
+```sh
+npx expo install @wekor/react-native-wifi
+```
+
+Add the config plugin to `app.config.ts` (or `app.json`):
+
+```ts
+import type { ExpoConfig } from 'expo/config';
+import type { WifiPluginProps } from '@wekor/react-native-wifi/plugin';
+
+export default {
+  name: 'my-app',
+  slug: 'my-app',
+  plugins: [
+    [
+      '@wekor/react-native-wifi',
+      {
+        // Shown under iOS's own title ("… would like to find and connect to devices on your local
+        // network"): say why the app needs it.
+        localNetworkPermission: 'This app needs local network access to communicate with your devices.',
+        // Shown in iOS's location prompt: say why the app reads the network's name.
+        locationPermission: 'This app needs location access to show the Wi-Fi network your phone is connected to.',
+      } satisfies WifiPluginProps,
+    ],
+  ],
+} satisfies ExpoConfig;
+```
+
+Then build the app:
+
+```sh
+npx expo prebuild   # or let `npx expo run:ios`, `npx expo run:android` or EAS Build run it
+```
+
+The library has native code, so it needs a [development build](https://docs.expo.dev/develop/development-builds/introduction/);
+it does not run in Expo Go.
+
+### What the plugin adds
+
+| Platform | Added |
+| --- | --- |
+| iOS | `NSLocalNetworkUsageDescription`, `NSLocationWhenInUseUsageDescription`, `_preflight_check._tcp` in `NSBonjourServices`, and the Hotspot Configuration and Access Wi-Fi Information entitlements. A text you pass replaces the one there; without one, a text already set (by the app or another plugin, such as expo-location) stays. |
+| Android | `ACCESS_FINE_LOCATION`, `ACCESS_COARSE_LOCATION`, and `NEARBY_WIFI_DEVICES` with `neverForLocation`. The library's own manifest adds the Wi-Fi and network state permissions. |
+
+### Options
+
+| Option | Default | |
+| --- | --- | --- |
+| `localNetworkPermission` | `'This app needs local network access to communicate with your devices.'` | <Platforms ios /> The local network prompt; `false` adds neither it nor the Bonjour service. |
+| `locationPermission` | `'This app needs location access to show the Wi-Fi network your phone is connected to.'` | <Platforms ios /> The location prompt; `false` leaves it out. |
+| `hotspotConfiguration` | `true` | <Platforms ios /> The entitlement [`joinNetwork`](./api.mdx#joinnetwork) needs. |
+| `wifiInfo` | `true` | <Platforms ios /> The entitlement reading the network's name needs. |
+| `androidLocation` | `true` | <Platforms android /> Declares location, which reading the network's name needs. |
+| `neverForLocation` | `true` | <Platforms android /> Declares `NEARBY_WIFI_DEVICES` as not used for location; `false` if the app derives location from scans. |
+
+### Before you ship
+
+- **iOS capabilities**: enable Hotspot Configuration and Access Wi-Fi Information for the App ID. EAS Build does
+  this for you; otherwise do it in the Apple Developer portal.
+- **Plain HTTP on Android**: release builds refuse `http://` unless allowed, while debug builds allow it. Talking
+  to a device over HTTP, allow it with [`expo-build-properties`](https://docs.expo.dev/versions/latest/sdk/build-properties/)
+  (`npx expo install expo-build-properties`). iOS needs nothing for `http://` to an IP address.
+
+  ```ts
+  plugins: [['expo-build-properties', { android: { usesCleartextTraffic: true } }]],
+  ```
+
+- **Changed an option?** Run `npx expo prebuild` again; the plugin updates what it added.
+
+## Without Expo
+
+Install the package and run `pod install` in `ios/`, then add what the plugin would.
+
+`ios/<App>/Info.plist`:
+
+```xml
+<key>NSLocalNetworkUsageDescription</key>
+<string>This app needs local network access to communicate with your devices.</string>
+<key>NSBonjourServices</key>
+<array>
+  <string>_preflight_check._tcp</string>
+</array>
+<key>NSLocationWhenInUseUsageDescription</key>
+<string>This app needs location access to show the Wi-Fi network your phone is connected to.</string>
+```
+
+`ios/<App>/<App>.entitlements`:
+
+```xml
+<key>com.apple.developer.networking.HotspotConfiguration</key>
+<true/>
+<key>com.apple.developer.networking.wifi-info</key>
+<true/>
+```
+
+`android/app/src/main/AndroidManifest.xml`:
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES"
+                   android:usesPermissionFlags="neverForLocation"
+                   tools:targetApi="tiramisu" />
+
+  <!-- Only to talk to a device over plain HTTP -->
+  <application android:usesCleartextTraffic="true" />
+</manifest>
+```

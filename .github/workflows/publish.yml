@@ -1,0 +1,69 @@
+name: Release
+
+# release-please keeps a release PR open against main (version bump +
+# CHANGELOG, computed from Conventional Commits). Merging that PR makes it tag
+# vX.Y.Z and create the GitHub release; the publish job then pushes the same
+# commit to npm via Trusted Publishing (OIDC), with no NPM_TOKEN secret, and
+# the docs job deploys the docs site.
+#
+# Publish lives in this workflow, not a separate on-tag one, because tags and
+# releases created with GITHUB_TOKEN don't trigger other workflows; for the
+# same reason the docs are deployed by calling publish-docs.yml. The npm
+# Trusted Publisher is bound to this file name. If a job fails, use "Re-run
+# failed jobs" on the run.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+    steps:
+      - name: Release Please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+
+  publish:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      # Trusted Publishing needs npm >= 11.5.1.
+      - name: Upgrade npm
+        run: npm install -g npm@11.18.0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - run: bun run prepare
+      - name: Resolve npm dist-tag
+        run: |
+          tag=$(node -p "const version = require('./package.json').version; const match = version.match(/^[^-]+-([0-9A-Za-z]+)(?:[.-].*)?$/); match ? match[1] : 'latest'")
+          echo "NPM_PUBLISH_TAG=$tag" >> "$GITHUB_ENV"
+      - run: npm publish --access public --ignore-scripts --tag "$NPM_PUBLISH_TAG"
+
+  docs:
+    needs: publish
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/publish-docs.yml

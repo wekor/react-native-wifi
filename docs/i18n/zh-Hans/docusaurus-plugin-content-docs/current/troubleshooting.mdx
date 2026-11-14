@@ -1,0 +1,48 @@
+---
+title: 故障排查
+---
+
+# 故障排查
+
+## 加入后设备不响应 {#joined-but-the-device-does-not-answer}
+
+按常见程度排序：
+
+| 原因 | 现象 | 解决办法 |
+| --- | --- | --- |
+| iOS 阻止了本地网络 | `'local-network-denied'` | 加入前调用 [`requestLocalNetworkPermission()`](./permissions.mdx#local-network-permission)；一旦被拒绝，只能在设置中更改。 |
+| 设备的服务在热点开启之后才启动 | `'unreachable'`，"connection was refused" | 延长 `timeout`。 |
+| 明文 HTTP 被阻止（Android release 构建） | `probe` 为 `true`，但 `fetch` 失败 | 允许明文流量：参见[安装](./installation.mdx#before-you-ship)。 |
+| VPN 截获了本地流量 | `'unreachable'`，"a VPN carried the attempt" | 在 VPN 中排除本地网络，或关闭 VPN。 |
+| 手机离开热点，改用移动数据 | 触发 `onLost`（Android） | 有些手机连上没有互联网的 Wi-Fi 一段时间后会自动离开；重新加入即可。 |
+
+## Android 上的加入面板 {#the-join-sheet-on-android}
+
+- **网络还没出现时就被关掉。** 面板仍在搜索时，有些手机（例如三星）关闭它不会通知 App；这次加入会等到
+  `timeout` 才结束，而不是返回 `'not-found'`。把超时设成你本来就愿意等的时长。
+- **超时后出现“无法连接”提示框。** 加入放弃时，有些手机会弹出这个提示框，下一次加入的面板会被它挡住，
+  直到用户点“确定”。
+- **手机自己开着热点。** 很多手机共享网络时会关闭 Wi-Fi，这时加入会在弹出面板之前就以 `'wifi-off'` 拒绝。
+
+## Android 9 和 10 {#android-9-and-10}
+
+- **Android 9 及更早：`leave()` 不会离开用户自己保存的网络。** 这次加入用的是用户保存的配置，App 无权删除或
+  停用它，所以手机会留在这个网络上。
+- **Android 9 及更早：Wi-Fi 刚打开时加入。** `joinNetwork` 会自己打开 Wi-Fi，Wi-Fi 还在启动时的加入可能失败；
+  重试即可。
+- **Android 10：重启后修改网络建议。** 在之后的启动中用新密码再次建议同一个网络，系统会保留旧密码。先移除
+  这条建议。
+
+## 需要告知用户的错误 {#errors-to-show-the-user}
+
+| `code` | 含义 | 告诉用户 |
+| --- | --- | --- |
+| `'user-denied'` | <Platforms ios /> 用户拒绝了加入弹窗。 | 需要加入设备的 Wi-Fi。 |
+| `'not-found'` | <Platforms android /> 网络不在范围内，或系统面板被关闭。 | 靠近一些再试。 |
+| `'unreachable'` | 已加入，但设备没有在 `waitFor` 上响应。 | 检查设备是否已开机，然后重试。 |
+| `'local-network-denied'` | <Platforms ios /> 本地网络权限被拒绝。 | 在设置中开启。 |
+| `'wifi-off'` | <Platforms android /> Wi-Fi 已关闭，常见原因是手机开着热点。 | 关闭热点并打开 Wi-Fi：[`openWifiSettings()`](./api.mdx#openwifisettings)。 |
+| `'timeout'` | 耗时超过 `timeout`。 | 重试。 |
+| `'cancelled'` | 你的 `signal` 中止了它，或被新的加入操作取代。 | 无需处理：是你自己取消的。 |
+
+所有错误都是 [`WifiError`](./api.mdx#wifierror)；完整列表见 [API 参考](./api.mdx#wifierrorcode)。

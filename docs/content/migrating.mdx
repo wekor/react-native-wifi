@@ -1,0 +1,98 @@
+---
+title: Migrating from react-native-wifi-reborn
+---
+
+# Migrating from react-native-wifi-reborn
+
+Most wifi-reborn calls map to one call here; several become a field of
+[`getCurrentNetwork()`](./api.mdx#getcurrentnetwork). Rejections are [`WifiError`](./api.mdx#wifierror)s:
+switch on `code` instead of comparing strings.
+
+## Joining
+
+| react-native-wifi-reborn | @wekor/react-native-wifi |
+| --- | --- |
+| `connectToProtectedSSID(ssid, password, isWEP, isHidden)` | `joinNetwork({ ssid, password, security: isWEP ? 'wep' : undefined, hidden: isHidden })` |
+| `connectToProtectedWifiSSID({ ssid, password, isHidden, timeout })` | `joinNetwork({ ssid, password, hidden, timeout: timeout * 1000 })`: milliseconds, on both platforms. |
+| `connectToSSID(ssid)` | `joinNetwork({ ssid })` |
+| `connectToProtectedSSIDOnce(ssid, password, isWEP, joinOnce)` | `joinNetwork({ ssid, password, joinOnce })` |
+| `connectToSSIDPrefix(prefix)`, `connectToProtectedSSIDPrefix(prefix, password, isWEP)` | `joinNetwork({ ssid: prefix, prefix: true, password })`, on Android 10+ too. |
+| A join, then polling the device until it answers | `joinNetwork({ ..., waitFor: { host, port } })` |
+| `disconnectFromSSID(ssid)` (iOS), `disconnect()` (Android) | `network.leave()` on both, or `forgetNetworks([ssid])`. |
+| `isRemoveWifiNetwork(ssid)` | `forgetNetworks([ssid])` |
+| `suggestWifiNetwork(configs)` | `addNetworkSuggestions(suggestions)`: `isWpa3` becomes `security: 'wpa3'`, `isAppInteractionRequired` becomes `appInteractionRequired`. |
+| `forceWifiUsageWithOptions(true, { noInternet })` | Done by `joinNetwork` itself; otherwise `bindProcessToWifi({ requireInternet: !noInternet })`. |
+| `forceWifiUsageWithOptions(false)`, `forceWifiUsage(false)` | `unbindProcess()`; leaving or losing the network unbinds by itself. |
+
+What changes in behaviour:
+
+- **The promise resolves when the phone is on the network** with an address, on iOS too, rather than when the
+  system accepted the request; with `waitFor`, when the device answers.
+- **One `timeout` bounds everything**, the user's time with the prompt included, and an `AbortSignal` cancels.
+- **Failed, cancelled and timed-out joins are undone**: iOS forgets a configuration the user accepted.
+- **Android routes traffic for you** and routes it back on `leave()` or when the network is lost; wifi-reborn
+  left the process bound.
+- **A lost network is reported**: [`onLost()`](./api.mdx#joinednetwork) instead of a failed request later.
+
+## Reaching the device
+
+| Before | @wekor/react-native-wifi |
+| --- | --- |
+| A `fetch` loop with a timeout per attempt and a pause between them | `probe(host, port, { timeout })` |
+| `@wekor/react-native-local-network-permission`'s `requestPermission()` | `requestLocalNetworkPermission()`, which resolves a `PermissionResponse` (`granted`) rather than a boolean. It probes the same way with the same service, `_preflight_check._tcp`, so an existing `NSBonjourServices` entry keeps working; the plugin's `localNetworkPermission` adds it otherwise. |
+
+## The current network
+
+| react-native-wifi-reborn | @wekor/react-native-wifi |
+| --- | --- |
+| `getCurrentWifiSSID()` | `(await getCurrentNetwork())?.ssid`. Absent without permission instead of rejecting. |
+| `getBSSID()` | `(await getCurrentNetwork())?.bssid` |
+| `getIP()` | `(await getCurrentNetwork())?.ip`, on iOS too. |
+| `getCurrentSignalStrength()` | `(await getCurrentNetwork())?.rssi` (Android) |
+| `getFrequency()` | `(await getCurrentNetwork())?.frequency` (Android) |
+| `connectionStatus()` | `(await getCurrentNetwork()) !== null` |
+| — | [`onCurrentNetworkChange()`](./api.mdx#oncurrentnetworkchange), [`useCurrentNetwork()`](./api.mdx#usecurrentnetwork) |
+
+wifi-reborn's `getCurrentWifiSSID()` on iOS prompted for location itself, and its Android joins required location
+permission. Here the app asks with [`requestWifiPermission()`](./api.mdx#requestwifipermission) when it chooses,
+and joining needs it only on Android 9 and earlier.
+
+## Android
+
+| react-native-wifi-reborn | @wekor/react-native-wifi |
+| --- | --- |
+| `loadWifiList()` | `getScanResults()` |
+| `reScanAndLoadWifiList()` | `scanNetworks()`: rejects with `'scan-throttled'` instead of resolving with a message string. |
+| `isEnabled()` | `isWifiEnabled()` |
+| `setEnabled(enabled)` | `openWifiSettings()`: since Android 10 only the user switches Wi-Fi. |
+| `openWifiSettings()` | `openWifiSettings()` |
+| — | `onWifiEnabledChange()` |
+
+Called on iOS, these reject with `'unsupported'` rather than failing with `undefined is not a function`.
+
+Scan results are renamed and typed: `SSID` → `ssid`, `BSSID` → `bssid`, `level` → `rssi`, and `timestamp` is
+milliseconds since the epoch; `band` and `security` are new. A hidden network's `ssid` is `''` rather than
+`'(hidden SSID)'`.
+
+## Config plugin
+
+| react-native-wifi-reborn | @wekor/react-native-wifi |
+| --- | --- |
+| `'react-native-wifi-reborn'` | `'@wekor/react-native-wifi'` |
+| `fineLocationPermission: false` | `androidLocation: false` |
+| — | `locationPermission`, `localNetworkPermission`, `hotspotConfiguration`, `wifiInfo`, `neverForLocation`; see [Installation](./installation.mdx#options). |
+
+## Error codes
+
+| react-native-wifi-reborn | `WifiError.code` |
+| --- | --- |
+| `userDenied` | `'user-denied'` |
+| `locationPermissionMissing`, `locationPermissionDenied`, `locationPermissionRestricted` | `'unauthorized'` |
+| `locationServicesOff` | `'location-off'` |
+| `couldNotEnableWifi` | `'wifi-off'` |
+| `didNotFindNetwork` | `'not-found'` |
+| `timeoutOccurred` | `'timeout'` |
+| `invalidSSID`, `invalidSSIDPrefix`, `invalidPassphrase`, `invalid` | `'invalid-argument'` |
+| `unavailableForOSVersion` | `'unsupported'` |
+| `couldNotScan` | `'scan-throttled'` |
+| `unableToConnect`, `authenticationErrorOccurred`, `android10ImmediatelyDroppedConnection` | `'join-failed'`, or `'timeout'` when the phone never got on the network |

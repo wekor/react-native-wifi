@@ -1,0 +1,55 @@
+---
+title: Permissions
+---
+
+# Permissions
+
+## Which one you need
+
+| To | Wi-Fi permission | Local network permission |
+| --- | --- | --- |
+| Join a device's hotspot | Not needed (Android 9 and earlier: needed) | iOS: needed, to talk to the device |
+| Talk to a device on the same network | Not needed | iOS: needed |
+| Read the name of the phone's network | Needed (iOS: not for a network the app joined) | Not needed |
+| Scan (Android) | Needed | Not needed |
+
+Neither is asked for on its own: ask when the user is about to need it.
+
+## Wi-Fi permission
+
+To read the network's name, and to scan. Both systems treat a network's name as location, so this is location
+underneath, and on Android 13+ also Nearby Wi-Fi devices.
+
+```ts
+import { Linking } from 'react-native';
+import { requestWifiPermission } from '@wekor/react-native-wifi';
+
+const { granted, canAskAgain } = await requestWifiPermission();
+if (!granted && !canAskAgain) Linking.openSettings(); // the system will not ask again
+```
+
+- [`getWifiPermission()`](./api.mdx#getwifipermission) reads it without asking;
+  [`useWifiPermission()`](./api.mdx#usewifipermission) keeps it in React state.
+- **Approximate location counts as denied**: it never reveals the name.
+- **It is the same system permission as expo-location's**: granted through either, it is granted for both.
+
+## Local network permission
+
+iOS 14+ blocks an app from the local network until the user allows it, and it does so silently: the device just
+looks unreachable. Ask before talking to the device:
+
+```ts
+import { requestLocalNetworkPermission } from '@wekor/react-native-wifi';
+
+const { granted } = await requestLocalNetworkPermission();
+if (!granted) showMessage('Allow local network access in Settings.');
+```
+
+- **Android has no such permission**: it resolves granted at once.
+- **There is no `get`.** iOS has no API for this permission; the library finds the answer by advertising a Bonjour
+  service and browsing for it, and that is what shows the prompt.
+- **It resolves once the user answers.** The first time, when they tap Allow or Don't Allow; after that, at once
+  when denied, and in about a second when granted.
+- **It needs two `Info.plist` entries**, which the config plugin's `localNetworkPermission` adds:
+  `NSLocalNetworkUsageDescription`, and `_preflight_check._tcp` in `NSBonjourServices`. Without either it rejects with
+  `'unsupported'` and names the missing one. Without Expo, see [Installation](./installation.mdx#without-expo).

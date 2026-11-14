@@ -1,0 +1,515 @@
+---
+title: API 参考
+toc_max_heading_level: 2
+---
+
+# API 参考 {#api-reference}
+
+```ts
+import {
+  addNetworkSuggestions,
+  bindProcessToWifi,
+  configure,
+  forgetNetworks,
+  getCurrentNetwork,
+  getScanResults,
+  getWifiPermission,
+  isWifiEnabled,
+  isWifiError,
+  joinNetwork,
+  onCurrentNetworkChange,
+  onWifiEnabledChange,
+  openWifiSettings,
+  probe,
+  removeNetworkSuggestions,
+  requestLocalNetworkPermission,
+  requestWifiPermission,
+  scanNetworks,
+  unbindProcess,
+  useCurrentNetwork,
+  useWifiPermission,
+  WifiError,
+} from '@wekor/react-native-wifi';
+```
+
+所有函数在两个平台上都存在。标记为仅限 Android 的函数在 iOS 上会以 `'unsupported'` reject（不返回 promise 的函数则直接
+抛出该错误），因为 iOS 做不到它们所做的事。
+
+## 目录 {#contents}
+
+### 权限 {#permissions}
+
+| API | 说明 |
+| --- | --- |
+| [`getWifiPermission()`](#getwifipermission) | 读取 Wi-Fi 权限，不会弹窗。 |
+| [`requestWifiPermission()`](#requestwifipermission) | 弹窗请求 Wi-Fi 权限：用于读取网络名称和扫描。 |
+| [`useWifiPermission()`](#usewifipermission) | 以 React state 形式提供的 Wi-Fi 权限。 |
+| [`requestLocalNetworkPermission()`](#requestlocalnetworkpermission) | 弹窗请求本地网络权限（iOS）。 |
+
+### 加入网络与访问设备 {#joining-and-reaching-devices}
+
+| API | 说明 |
+| --- | --- |
+| [`joinNetwork()`](#joinnetwork) | 让手机加入一个网络，可选择等到该网络上的设备响应。 |
+| [`JoinedNetwork`](#joinednetwork) | `joinNetwork` resolve 的结果：地址、`leave()`、`onLost()`。 |
+| [`forgetNetworks()`](#forgetnetworks) | 离开并忘记应用加入过的网络，无论是哪次启动时加入的。 |
+| [`probe()`](#probe) | 设备是否在超时前接受连接。 |
+| [`bindProcessToWifi()`](#bindprocesstowifi) | 让应用的流量经由 Wi-Fi 路由（Android）。 |
+| [`unbindProcess()`](#unbindprocess) | 恢复由系统选择路由。 |
+
+### 当前网络 {#current-network}
+
+| API | 说明 |
+| --- | --- |
+| [`getCurrentNetwork()`](#getcurrentnetwork) | 手机当前所在的 Wi-Fi 网络。 |
+| [`onCurrentNetworkChange()`](#oncurrentnetworkchange) | 网络或地址的每一次变化。 |
+| [`useCurrentNetwork()`](#usecurrentnetwork) | 以 React state 形式提供的当前 Wi-Fi 网络。 |
+
+### 仅限 Android {#android-only}
+
+| API | 说明 |
+| --- | --- |
+| [`scanNetworks()`](#scannetworks) | <Platforms android /> 扫描范围内的网络。 |
+| [`getScanResults()`](#getscanresults) | <Platforms android /> 系统上一次扫描的结果。 |
+| [`addNetworkSuggestions()`](#addnetworksuggestions) | <Platforms android="10+" /> 系统可自行加入的网络。 |
+| [`removeNetworkSuggestions()`](#removenetworksuggestions) | <Platforms android="10+" /> 撤回网络建议。 |
+| [`isWifiEnabled()`](#iswifienabled) | <Platforms android /> Wi-Fi 是否开启。 |
+| [`onWifiEnabledChange()`](#onwifienabledchange) | <Platforms android /> Wi-Fi 开启或关闭。 |
+| [`openWifiSettings()`](#openwifisettings) | <Platforms android /> 打开 Wi-Fi 面板或设置。 |
+
+### 配置与错误 {#configuration-and-errors}
+
+| API | 说明 |
+| --- | --- |
+| [`configure()`](#configure) | 默认超时。 |
+| [`WifiError`](#wifierror) | 所有失败都携带的错误。 |
+| [`isWifiError()`](#iswifierror) | 将未知错误收窄为 `WifiError`。 |
+
+## 权限 {#permissions-1}
+
+<ApiBox id="getwifipermission" name="getWifiPermission()" android ios>
+
+读取 Wi-Fi 权限，不会弹窗。
+
+<Returns>`Promise<PermissionResponse>`。参见 [`PermissionResponse`](#permissionresponse)。</Returns>
+
+</ApiBox>
+
+<ApiBox id="requestwifipermission" name="requestWifiPermission()" android ios>
+
+如果仍可以询问用户，则弹窗请求读取手机当前所在网络的名称以及扫描的权限；否则立即以当前的响应
+resolve。授权后，
+[`onCurrentNetworkChange()`](#oncurrentnetworkchange) 的监听器会再次收到当前网络，这次带有名称。仅在
+Android 9 及以下，加入网络才需要此权限。
+
+<Returns>`Promise<PermissionResponse>`。`granted` 需要精确位置。</Returns>
+
+<Errors>iOS 上缺少 `NSLocationWhenInUseUsageDescription` 时为 `'unsupported'`。</Errors>
+
+**请求的权限**
+
+| 平台 | 权限 |
+| --- | --- |
+| Android 13 及以上 | `ACCESS_FINE_LOCATION`、`ACCESS_COARSE_LOCATION` 和 `NEARBY_WIFI_DEVICES`，以 manifest 中声明的为限 |
+| Android 12 及以下 | `ACCESS_FINE_LOCATION` 和 `ACCESS_COARSE_LOCATION` |
+| iOS | 使用期间的位置权限，需开启精确位置 |
+
+```ts
+const { granted, canAskAgain } = await requestWifiPermission();
+if (!granted && !canAskAgain) Linking.openSettings();
+```
+
+</ApiBox>
+
+<ApiBox id="usewifipermission" name="useWifiPermission(options)" android ios>
+
+以 React state 形式提供的 Wi-Fi 权限，形式与 Expo 的权限 Hook 一致。
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `options`<Optional /> | `{ get?: boolean; request?: boolean }` | `get`（默认 `true`）在挂载时读取权限。`request`（默认 `false`）改为在挂载时请求权限。 |
+
+<Returns>`[PermissionResponse | null, request, get]`。读取完成前响应为 `null`；`request` 和 `get` 返回 `Promise<PermissionResponse>` 并更新 state。</Returns>
+
+</ApiBox>
+
+<ApiBox id="requestlocalnetworkpermission" name="requestLocalNetworkPermission(options)" android ios>
+
+弹窗请求本地网络权限（iOS 14+ 要求应用在访问本地网络上的设备之前获得该权限），并以用户的回答
+resolve；如果用户已经回答过，则不弹窗，直接以该回答 resolve。iOS 没有为该权限提供 API：
+本库会发布一个 Bonjour 服务并浏览它，这也是没有 `get` 的原因。
+Android 没有此类权限，会立即以已授权 resolve。
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `options`<Optional /> | `{ timeout?: number; signal?: AbortSignal }` | 弹窗会一直等待用户操作；`timeout`（默认无）用于限制等待时长。 |
+
+<Returns>`Promise<PermissionResponse>`。用户回答后 `canAskAgain` 即为 `false`：只能在设置中更改。</Returns>
+
+<Errors>`Info.plist` 缺少 `NSLocalNetworkUsageDescription`，或 `NSBonjourServices` 中没有 `_preflight_check._tcp` 时为 `'unsupported'`（config plugin 会自动添加两者）；App 在后台时为 `'not-permitted'`，iOS 在后台会直接拒绝而不弹窗；`'timeout'`；`'cancelled'`。</Errors>
+
+```ts
+const { granted } = await requestLocalNetworkPermission();
+```
+
+</ApiBox>
+
+## 加入网络与访问设备 {#joining-and-reaching-devices-1}
+
+<ApiBox id="joinnetwork" name="joinNetwork(options)" android ios>
+
+让手机加入一个网络，在连上该网络并获得地址后 resolve，在 Android 上还会让应用的流量经由该网络路由；
+指定 `waitFor` 时，还要等到设备接受连接后才 resolve。系统会先询问用户。失败时手机会留在原来的网络上。
+新的加入会替换之前的加入。参见
+[加入网络](./hotspot-devices.mdx)。
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `options` | [`JoinNetworkOptions`](#joinnetworkoptions) | 要加入的网络、要等待的设备，以及等待多久。 |
+
+<Returns>`Promise<JoinedNetwork>`。参见 [`JoinedNetwork`](#joinednetwork)。</Returns>
+
+<Errors>`'user-denied'`（iOS）、`'not-found'`（Android：不在范围内，或弹窗被关闭）、`'unreachable'`（已加入，但 `waitFor` 始终没有响应）、`'local-network-denied'`（iOS）、`'timeout'`、`'cancelled'`、`'wifi-off'`（Android 10+）、`'invalid-argument'`、`'unsupported'`、`'not-permitted'`（iOS，处于后台时）、`'join-failed'`。</Errors>
+
+```ts
+const network = await joinNetwork({
+  ssid: 'Device_',
+  prefix: true,
+  password: 'secret123',
+  waitFor: { host: '192.168.4.1', port: 80 },
+});
+```
+
+</ApiBox>
+
+<ApiBox id="joinednetwork" name="JoinedNetwork" android ios>
+
+| 属性 | 类型 | 说明 |
+| --- | --- | --- |
+| `ssid` | `string` | 网络的实际名称；使用 `prefix` 时，为系统选中的网络名称（在平台会报告的情况下）。 |
+| `bssid`<Optional /> | `string` | 大写，以冒号分隔。 |
+| `ip`<Optional /> | `string` | 手机在该网络上的 IPv4 地址。 |
+| `gateway`<Optional /> | `string` | <Platforms android /> 默认网关，通常就是提供该热点的设备。 |
+| `active` | `boolean` | 在调用 `leave()` 或手机自行离开该网络之前为 `true`。 |
+
+| 方法 | 说明 |
+| --- | --- |
+| `leave(): Promise<void>` | 离开该网络并让系统忘记它。网络丢失后同样适用：iOS 会一直保留其配置，直到被忘记。再次调用不会有任何效果。 |
+| `onLost(listener: () => void): () => void` | 当手机自行离开该网络，或被新的加入替换时，调用一次 `listener`；返回移除函数。 |
+
+</ApiBox>
+
+<ApiBox id="forgetnetworks" name="forgetNetworks(ssids)" android ios>
+
+离开应用加入过的网络，并让系统忘记它们。在 iOS 上，这也包括之前启动时加入的网络，iOS 会一直保留
+它们直到被忘记；在 Android 上，加入会随应用退出而结束，因此只会离开当前加入的网络。
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `ssids`<Optional /> | `string[]` | 网络名称，或传给 `joinNetwork` 的前缀；省略时为应用加入过的所有网络。 |
+
+<Returns>`Promise<void>`</Returns>
+
+</ApiBox>
+
+<ApiBox id="probe" name="probe(host, port, options)" android ios>
+
+`host` 是否在超时前接受 `port` 上的 TCP 连接：可据此判断设备是否已在手机所在的
+网络上就绪。一旦接受即 resolve `true`。任何协议都适用，因为只会建立连接。参见
+[访问设备](./same-network.mdx)。
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `host` | `string` | 设备的 IP 地址或主机名。 |
+| `port` | `number` | 其服务监听的端口。 |
+| `options`<Optional /> | `{ timeout?: number; signal?: AbortSignal }` | `timeout` 默认为 5 秒。 |
+
+<Returns>`Promise<boolean>`：超时仍未建立连接时为 `false`。</Returns>
+
+<Errors>`'local-network-denied'`（iOS：需要用户在设置中允许）、`'invalid-argument'`（host 为空，或端口不在 1–65535 之间）、`'cancelled'`。</Errors>
+
+```ts
+if (await probe('192.168.1.42', 80, { timeout: 2_000 })) startTransfer();
+```
+
+</ApiBox>
+
+<ApiBox id="bindprocesstowifi" name="bindProcessToWifi(options)" android ios>
+
+让应用的所有流量经由 Wi-Fi 路由，包括 Android 本会因没有互联网而弃用、改走移动数据的网络，
+直到调用 [`unbindProcess()`](#unbindprocess)。若有处于活动状态的 `joinNetwork`，则绑定到已加入的
+网络。如果网络消失，流量会恢复由系统选择路由。iOS 上会立即 resolve：iOS 无需绑定，
+就会把发往 Wi-Fi 网络地址的流量发到该网络。
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `options`<Optional /> | `{ requireInternet?: boolean; timeout?: number }` | `requireInternet`（默认 `false`）等待一个可访问互联网的 Wi-Fi 网络。`timeout` 默认为 10 秒。 |
+
+<Returns>`Promise<void>`，绑定完成后 resolve。</Returns>
+
+<Errors>`'timeout'`、`'cancelled'`（新的绑定或解除绑定）。</Errors>
+
+</ApiBox>
+
+<ApiBox id="unbindprocess" name="unbindProcess()" android ios>
+
+让应用的流量恢复由系统选择路由，并释放 `bindProcessToWifi` 所持有的网络。iOS
+上会立即 resolve。
+
+<Returns>`Promise<void>`</Returns>
+
+</ApiBox>
+
+## 当前网络 {#current-network-1}
+
+<ApiBox id="getcurrentnetwork" name="getCurrentNetwork()" android ios>
+
+手机当前所在的 Wi-Fi 网络。不会因缺少权限而 reject：没有 Wi-Fi 权限时，返回的网络
+不含 `ssid` 和 `bssid`。
+
+<Returns>`Promise<WifiNetwork | null>`：手机未连接任何 Wi-Fi 网络时为 `null`。参见 [`WifiNetwork`](#wifinetwork)。</Returns>
+
+</ApiBox>
+
+<ApiBox id="oncurrentnetworkchange" name="onCurrentNetworkChange(listener)" android ios>
+
+一旦得知当前 Wi-Fi 网络就以它调用 `listener`，之后每当手机加入、离开或切换网络，或者地址、网关
+发生变化时再次调用。仅信号强度和连接速率的变化不算作变化。
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `listener` | `(network: WifiNetwork \| null) => void` | 手机未连接任何 Wi-Fi 网络时以 `null` 调用。 |
+
+<Returns>`() => void`，用于移除监听器。多次调用也没有影响。</Returns>
+
+</ApiBox>
+
+<ApiBox id="usecurrentnetwork" name="useCurrentNetwork()" android ios>
+
+以 React state 形式提供的当前 Wi-Fi 网络。
+
+<Returns>`WifiNetwork | null | undefined`：得知之前为 `undefined`，手机未连接任何 Wi-Fi 网络时为 `null`。</Returns>
+
+</ApiBox>
+
+## 仅限 Android {#android-only-1}
+
+<ApiBox id="scannetworks" name="scanNetworks(options)" android>
+
+发起一次扫描，并以扫描到的结果 resolve。扫描进行期间的调用会共享同一次扫描。
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `options`<Optional /> | `{ timeout?: number }` | 等待的毫秒数；默认 15 秒，`0` 表示不限时。 |
+
+<Returns>`Promise<ScannedNetwork[]>`，每个接入点一项。参见 [`ScannedNetwork`](#scannednetwork)。</Returns>
+
+<Errors>`'unsupported'`（iOS）、`'unauthorized'`、`'location-off'`（Android 13 之前）、`'wifi-off'`、`'scan-throttled'`（自 Android 9 起，前台 2 分钟内 4 次扫描）、`'scan-failed'`、`'timeout'`。</Errors>
+
+</ApiBox>
+
+<ApiBox id="getscanresults" name="getScanResults()" android>
+
+系统上一次扫描的结果，无论由谁发起；不会发起新的扫描。
+
+<Returns>`Promise<ScannedNetwork[]>`</Returns>
+
+<Errors>`'unsupported'`（iOS）、`'unauthorized'`、`'location-off'`（Android 13 之前）。</Errors>
+
+</ApiBox>
+
+<ApiBox id="addnetworksuggestions" name="addNetworkSuggestions(suggestions)" android="10+">
+
+建议系统可自行加入的网络；用户只需在通知中批准本应用一次。再次建议同一网络
+会替换之前对它的建议。
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `suggestions` | [`NetworkSuggestion[]`](#networksuggestion) | 要建议的网络。 |
+
+<Returns>`Promise<void>`</Returns>
+
+<Errors>`'unsupported'`（iOS、Android 9 及以下）、`'invalid-argument'`、`'unauthorized'`（用户禁止了本应用的网络建议）、`'join-failed'`（数量过多，或其他拒绝原因；状态见 `nativeCode`）。</Errors>
+
+</ApiBox>
+
+<ApiBox id="removenetworksuggestions" name="removeNetworkSuggestions(ssids)" android="10+">
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `ssids`<Optional /> | `string[]` | 要撤回的网络；省略时撤回本应用的所有网络建议。 |
+
+<Returns>`Promise<void>`</Returns>
+
+<Errors>`'unsupported'`（iOS、Android 9 及以下）。</Errors>
+
+</ApiBox>
+
+<ApiBox id="iswifienabled" name="isWifiEnabled()" android>
+
+<Returns>`Promise<boolean>`</Returns>
+
+<Errors>`'unsupported'`（iOS：系统不提供该信息）。</Errors>
+
+</ApiBox>
+
+<ApiBox id="onwifienabledchange" name="onWifiEnabledChange(listener)" android>
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `listener` | `(enabled: boolean) => void` | Wi-Fi 开启或关闭后调用。 |
+
+<Returns>`() => void`，用于移除监听器。</Returns>
+
+<Throws>`'unsupported'`（iOS）。</Throws>
+
+</ApiBox>
+
+<ApiBox id="openwifisettings" name="openWifiSettings()" android>
+
+在 Android 10+ 上于应用上方打开 Wi-Fi 面板，更早的版本则打开 Wi-Fi 设置。在 Android 10+ 上，
+只有用户能开关 Wi-Fi。
+
+<Returns>`Promise<void>`，打开后 resolve。</Returns>
+
+<Errors>`'unsupported'`（iOS：应用无法打开 Wi-Fi 设置）。</Errors>
+
+</ApiBox>
+
+## 配置与错误 {#configuration-and-errors-1}
+
+<ApiBox id="configure" name="configure(options)" android ios>
+
+设置后续调用使用的默认值；调用自身传入的选项优先。
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `options.timeouts`<Optional /> | `{ join?: number; probe?: number; scan?: number; bind?: number }` | 毫秒；`0` 表示不限时。默认值：`join` 30 秒，`probe` 5 秒，`scan` 15 秒，`bind` 10 秒。 |
+
+```ts
+configure({ timeouts: { join: 60_000 } });
+```
+
+</ApiBox>
+
+<ApiBox id="wifierror" name="WifiError" android ios>
+
+所有 reject 都是 `WifiError`，两个平台上的 `code` 相同。
+
+| 属性 | 类型 | 说明 |
+| --- | --- | --- |
+| `code` | [`WifiErrorCode`](#wifierrorcode) | 出了什么问题。 |
+| `message` | `string` | 描述信息，用于日志；对于 `'unreachable'`，为最后一次失败的原因。 |
+| `nativeCode`<Optional /> | `number` | 平台自身的代码：iOS 上为 `NEHotspotConfigurationError`，Android 上为网络建议状态。 |
+
+</ApiBox>
+
+<ApiBox id="iswifierror" name="isWifiError(error, code)" android ios>
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `error` | `unknown` | 捕获到的任意值。 |
+| `code`<Optional /> | `WifiErrorCode` | 同时检查错误码。 |
+
+<Returns>`error is WifiError`</Returns>
+
+```ts
+try {
+  await joinNetwork({ ssid, password, waitFor });
+} catch (error) {
+  if (isWifiError(error, 'user-denied')) return;
+  if (isWifiError(error, 'local-network-denied')) return showOpenSettings();
+  throw error;
+}
+```
+
+</ApiBox>
+
+## 类型 {#types}
+
+### `PermissionResponse`
+
+| 属性 | 类型 | 说明 |
+| --- | --- | --- |
+| `status` | `'granted' \| 'denied' \| 'undetermined'` | |
+| `granted` | `boolean` | `status === 'granted'`。 |
+| `canAskAgain` | `boolean` | 请求时是否仍能显示弹窗。 |
+| `expires` | `'never'` | |
+
+### `JoinNetworkOptions`
+
+| 属性 | 类型 | 说明 |
+| --- | --- | --- |
+| `ssid` | `string` | 网络名称；使用 `prefix` 时为名称的开头部分。 |
+| `prefix`<Optional /> | `boolean` | 加入任何名称以 `ssid` 开头的网络。适用于 Android 10+ 和 iOS；不能与 `hidden` 同时使用。 |
+| `password`<Optional /> | `string` | 开放网络无需填写。 |
+| `security`<Optional /> | [`Security`](#security) | 有密码时为 `'wpa2'`，否则为 `'open'`。 |
+| `hidden`<Optional /> | `boolean` | 该网络不广播其名称。 |
+| `waitFor`<Optional /> | `{ host: string; port: number }` | 仅在它接受 TCP 连接后才 resolve；否则以 `'unreachable'` reject 并离开网络。 |
+| `timeout`<Optional /> | `number` | 整个过程的毫秒数，包括用户处理弹窗的时间和 `waitFor`；`0` 表示不限时。默认 30 秒。 |
+| `signal`<Optional /> | `AbortSignal` | 中止时以 `'cancelled'` reject，并撤销本次加入。 |
+| `bindProcess`<Optional /> | `boolean` | <Platforms android /> 连接该网络期间，让应用的流量经由它路由；默认 `true`。 |
+| `joinOnce`<Optional /> | `boolean` | <Platforms ios /> 应用离开前台时，系统会忘记该网络；默认 `false`。 |
+
+### `Security`
+
+`'open' | 'wep' | 'wpa2' | 'wpa3'`。`'wpa2'` 也能加入 WPA 和 WPA2/WPA3 过渡模式网络。`'wpa3'` 用于
+仅支持 WPA3 的网络；iOS 会以 WPA2 方式加入。`'wep'` 适用于 iOS 以及 Android 9 及以下。
+
+### `WifiNetwork`
+
+平台不报告或隐藏的字段不会出现。
+
+| 属性 | 类型 | 说明 |
+| --- | --- | --- |
+| `ssid`<Optional /> | `string` | 没有 Wi-Fi 权限或位置服务关闭（Android）时不存在。在 iOS 上，应用加入的网络总是带有名称。 |
+| `bssid`<Optional /> | `string` | 大写，以冒号分隔；`ssid` 隐藏时同样隐藏。 |
+| `ip`<Optional /> | `string` | 手机的 IPv4 地址。 |
+| `gateway`<Optional /> | `string` | <Platforms android /> IPv4 默认网关。 |
+| `rssi`<Optional /> | `number` | <Platforms android /> 信号强度，单位 dBm。 |
+| `frequency`<Optional /> | `number` | <Platforms android /> 信道频率，单位 MHz。 |
+| `linkSpeed`<Optional /> | `number` | <Platforms android /> 连接速率，单位 Mbps。 |
+
+### `ScannedNetwork`
+
+| 属性 | 类型 | 说明 |
+| --- | --- | --- |
+| `ssid` | `string` | 隐藏名称的网络为空字符串。 |
+| `bssid` | `string` | 大写，以冒号分隔。 |
+| `rssi` | `number` | 信号强度，单位 dBm。 |
+| `frequency` | `number` | 信道频率，单位 MHz。 |
+| `band` | `'2.4GHz' \| '5GHz' \| '6GHz' \| '60GHz' \| 'unknown'` | |
+| `security` | `'open' \| 'owe' \| 'wep' \| 'wpa' \| 'wpa2' \| 'wpa3' \| 'enterprise'` | 网络提供的最强安全类型。使用 `security: 'wpa2'` 加入 `wpa` 和 `wpa2` 网络；`owe` 和 `enterprise` 网络无法通过 `joinNetwork` 加入。 |
+| `capabilities` | `string` | 原始字符串，例如 `[WPA2-PSK-CCMP][RSN-PSK-CCMP][ESS]`。 |
+| `timestamp` | `number` | 最后一次发现该网络的时间，以自 epoch 起的毫秒数表示。 |
+
+### `NetworkSuggestion`
+
+| 属性 | 类型 | 说明 |
+| --- | --- | --- |
+| `ssid` | `string` | |
+| `password`<Optional /> | `string` | 开放网络无需填写。 |
+| `security`<Optional /> | `'open' \| 'wpa2' \| 'wpa3'` | 有密码时为 `'wpa2'`，否则为 `'open'`。 |
+| `hidden`<Optional /> | `boolean` | |
+| `appInteractionRequired`<Optional /> | `boolean` | 系统仅在应用运行时加入该网络。 |
+
+### `WifiErrorCode`
+
+| 错误码 | 含义 |
+| --- | --- |
+| `'user-denied'` | <Platforms ios /> 用户拒绝了系统的加入弹窗。 |
+| `'not-found'` | <Platforms android /> 网络不在范围内，或用户关闭了系统弹窗。 |
+| `'unreachable'` | 手机已加入，但 `waitFor` 未能及时接受连接；消息中会给出最后一次失败的原因。 |
+| `'local-network-denied'` | <Platforms ios /> iOS 禁止应用访问本地网络；只能在设置中更改。 |
+| `'unauthorized'` | 调用所需的权限未被授予。 |
+| `'location-off'` | <Platforms android /> 位置服务已关闭，因此系统隐藏了 Wi-Fi 网络。 |
+| `'wifi-off'` | <Platforms android /> Wi-Fi 已关闭，且应用无法将其开启（Android 10+）。 |
+| `'unsupported'` | 在当前平台或系统版本上无法实现：例如在 iOS 上调用仅限 Android 的函数，或在 Android 10 之前使用 `prefix` 等选项。 |
+| `'timeout'` | 已超时。 |
+| `'cancelled'` | 调用方中止了操作，或新的调用替换了本次调用。 |
+| `'not-permitted'` | <Platforms ios /> 应用处于后台，系统在后台拒绝加入。 |
+| `'invalid-argument'` | 库或系统拒绝的选项，例如长度不正确的密码。 |
+| `'scan-throttled'` | <Platforms android /> Android 拒绝了扫描：前台 2 分钟内已扫描 4 次。 |
+| `'scan-failed'` | <Platforms android /> 扫描已执行，但没有产生新结果。 |
+| `'join-failed'` | 系统无法加入或路由；详见 `nativeCode`。 |
+| `'unknown'` | 其他任何错误。 |
