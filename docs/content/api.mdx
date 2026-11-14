@@ -100,7 +100,7 @@ Reads the Wi-Fi permission without prompting.
 Prompts for the permission to read the name of the network the phone is on, and to scan, when the user can still
 be asked; otherwise resolves at once with the current response. A grant has
 [`onCurrentNetworkChange()`](#oncurrentnetworkchange) listeners get the network again, now named. Joining
-a network needs it only on Android 9 and earlier.
+a network needs it only on Android 9 and earlier, where [`joinNetwork()`](#joinnetwork) asks for it itself.
 
 <Returns>`Promise<PermissionResponse>`. `granted` needs precise location.</Returns>
 
@@ -159,7 +159,8 @@ const { granted } = await requestLocalNetworkPermission();
 <ApiBox id="joinnetwork" name="joinNetwork(options)" android ios>
 
 Puts the phone on a network and resolves once it is on it with an address and, on Android, routes the app's
-traffic there; with `waitFor`, also once the device accepts a connection. The system asks the user first. A
+traffic there; with `waitFor`, also once the device accepts a connection. The system asks the user first; on
+Android 9 and earlier, so does the [Wi-Fi permission](./permissions.mdx#wi-fi-permission) when the app lacks it. A
 failure leaves the phone where it was. A newer join replaces an earlier one. See
 [Connect to a device's hotspot](./hotspot-devices.mdx).
 
@@ -169,7 +170,7 @@ failure leaves the phone where it was. A newer join replaces an earlier one. See
 
 <Returns>`Promise<JoinedNetwork>`. See [`JoinedNetwork`](#joinednetwork).</Returns>
 
-<Errors>`'user-denied'` (iOS), `'not-found'` (Android: not in range, or the sheet dismissed), `'unreachable'` (joined, but `waitFor` never answered), `'local-network-denied'` (iOS), `'timeout'`, `'cancelled'`, `'wifi-off'` (Android 10+), `'invalid-argument'`, `'unsupported'`, `'not-permitted'` (iOS, in the background), `'join-failed'`.</Errors>
+<Errors>`'user-denied'` (iOS), `'not-found'` (Android: not in range, or the sheet dismissed), `'unreachable'` (joined, but `waitFor` never answered), `'local-network-denied'` (iOS), `'timeout'`, `'cancelled'`, `'wifi-off'` (Android 10+), `'unauthorized'` (Android 9 and earlier: the Wi-Fi permission refused), `'invalid-argument'`, `'unsupported'`, `'not-permitted'` (iOS, in the background), `'join-failed'`.</Errors>
 
 ```ts
 const network = await joinNetwork({
@@ -446,7 +447,7 @@ try {
 | `security`<Optional /> | [`Security`](#security) | `'wpa2'` with a password, else `'open'`. |
 | `hidden`<Optional /> | `boolean` | The network does not broadcast its name. |
 | `waitFor`<Optional /> | `{ host: string; port: number }` | Resolve only once this accepts a TCP connection; else reject with `'unreachable'` and leave. |
-| `timeout`<Optional /> | `number` | Milliseconds for all of it, the user's time with the prompt and `waitFor` included; `0` without limit. Default 30 s. |
+| `timeout`<Optional /> | `number` | Milliseconds for all of it, the user's time with the prompt and `waitFor` included (not the permission prompt on Android 9 and earlier); `0` without limit. Default 30 s. |
 | `signal`<Optional /> | `AbortSignal` | Aborting rejects with `'cancelled'` and undoes the join. |
 | `bindProcess`<Optional /> | `boolean` | <Platforms android /> Routes the app's traffic through the network while on it; default `true`. |
 | `joinOnce`<Optional /> | `boolean` | <Platforms ios /> The system forgets the network when the app leaves the foreground; default `false`. |

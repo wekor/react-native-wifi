@@ -100,7 +100,7 @@ import {
 如果仍可以询问用户，则弹窗请求读取手机当前所在网络的名称以及扫描的权限；否则立即以当前的响应
 resolve。授权后，
 [`onCurrentNetworkChange()`](#oncurrentnetworkchange) 的监听器会再次收到当前网络，这次带有名称。仅在
-Android 9 及以下，加入网络才需要此权限。
+Android 9 及以下，加入网络才需要此权限，[`joinNetwork()`](#joinnetwork) 会自己请求。
 
 <Returns>`Promise<PermissionResponse>`。`granted` 需要精确位置。</Returns>
 
@@ -159,7 +159,8 @@ const { granted } = await requestLocalNetworkPermission();
 <ApiBox id="joinnetwork" name="joinNetwork(options)" android ios>
 
 让手机加入一个网络，在连上该网络并获得地址后 resolve，在 Android 上还会让应用的流量经由该网络路由；
-指定 `waitFor` 时，还要等到设备接受连接后才 resolve。系统会先询问用户。失败时手机会留在原来的网络上。
+指定 `waitFor` 时，还要等到设备接受连接后才 resolve。系统会先询问用户；在 Android 9 及以下，如果应用还没有
+[Wi-Fi 权限](./permissions.mdx#wi-fi-permission)，也会先请求它。失败时手机会留在原来的网络上。
 新的加入会替换之前的加入。参见
 [加入网络](./hotspot-devices.mdx)。
 
@@ -169,7 +170,7 @@ const { granted } = await requestLocalNetworkPermission();
 
 <Returns>`Promise<JoinedNetwork>`。参见 [`JoinedNetwork`](#joinednetwork)。</Returns>
 
-<Errors>`'user-denied'`（iOS）、`'not-found'`（Android：不在范围内，或弹窗被关闭）、`'unreachable'`（已加入，但 `waitFor` 始终没有响应）、`'local-network-denied'`（iOS）、`'timeout'`、`'cancelled'`、`'wifi-off'`（Android 10+）、`'invalid-argument'`、`'unsupported'`、`'not-permitted'`（iOS，处于后台时）、`'join-failed'`。</Errors>
+<Errors>`'user-denied'`（iOS）、`'not-found'`（Android：不在范围内，或弹窗被关闭）、`'unreachable'`（已加入，但 `waitFor` 始终没有响应）、`'local-network-denied'`（iOS）、`'timeout'`、`'cancelled'`、`'wifi-off'`（Android 10+）、`'unauthorized'`（Android 9 及以下：Wi-Fi 权限被拒绝）、`'invalid-argument'`、`'unsupported'`、`'not-permitted'`（iOS，处于后台时）、`'join-failed'`。</Errors>
 
 ```ts
 const network = await joinNetwork({
@@ -446,7 +447,7 @@ try {
 | `security`<Optional /> | [`Security`](#security) | 有密码时为 `'wpa2'`，否则为 `'open'`。 |
 | `hidden`<Optional /> | `boolean` | 该网络不广播其名称。 |
 | `waitFor`<Optional /> | `{ host: string; port: number }` | 仅在它接受 TCP 连接后才 resolve；否则以 `'unreachable'` reject 并离开网络。 |
-| `timeout`<Optional /> | `number` | 整个过程的毫秒数，包括用户处理弹窗的时间和 `waitFor`；`0` 表示不限时。默认 30 秒。 |
+| `timeout`<Optional /> | `number` | 整个过程的毫秒数，包括用户处理弹窗的时间和 `waitFor`（不含 Android 9 及以下的权限弹窗）；`0` 表示不限时。默认 30 秒。 |
 | `signal`<Optional /> | `AbortSignal` | 中止时以 `'cancelled'` reject，并撤销本次加入。 |
 | `bindProcess`<Optional /> | `boolean` | <Platforms android /> 连接该网络期间，让应用的流量经由它路由；默认 `true`。 |
 | `joinOnce`<Optional /> | `boolean` | <Platforms ios /> 应用离开前台时，系统会忘记该网络；默认 `false`。 |

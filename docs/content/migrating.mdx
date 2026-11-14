@@ -55,7 +55,7 @@ What changes in behaviour:
 
 wifi-reborn's `getCurrentWifiSSID()` on iOS prompted for location itself, and its Android joins required location
 permission. Here the app asks with [`requestWifiPermission()`](./api.mdx#requestwifipermission) when it chooses,
-and joining needs it only on Android 9 and earlier.
+and joining needs it only on Android 9 and earlier, where `joinNetwork` asks for it itself.
 
 ## Android
 
